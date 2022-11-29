@@ -801,6 +801,107 @@ class TestDerivationTree(unittest.TestCase):
         tree = DerivationTree.from_parse_tree(parse_tree)
         self.assertEqual(parse_tree, traversal_to_parse_tree(tree))
 
+    def test_terminals_and_nonterminals(self):
+        dtree = DerivationTree.from_parse_tree(
+            (
+                "<start>",
+                [
+                    (
+                        "<stmt>",
+                        [
+                            (
+                                "<assgn>",
+                                [
+                                    ("<var>", [("x", [])]),
+                                    (" := ", []),
+                                    ("<rhs>", [("<digit>", [("1", [])])]),
+                                ],
+                            ),
+                            (" ; ", []),
+                            ("<stmt>", [("<assgn>", None)]),
+                        ],
+                    )
+                ],
+            )
+        )
+
+        self.assertEqual({"x", " := ", "1", " ; "}, dtree.terminals())
+        self.assertEqual(
+            {"<start>", "<stmt>", "<assgn>", "<var>", "<rhs>", "<digit>"},
+            dtree.nonterminals(),
+        )
+
+    def test_next_path(self):
+        dtree = DerivationTree(
+            init_map={
+                (): DerivationTreeNode(1, "A"),
+                (0,): DerivationTreeNode(2, "B"),
+                (0, 0): DerivationTreeNode(4, "A"),
+                (0, 0, 0): DerivationTreeNode(5, "B"),
+                (0, 0, 1): DerivationTreeNode(6, "D"),
+                (1,): DerivationTreeNode(3, "C"),
+                (1, 0): DerivationTreeNode(7, "F"),
+                (1, 0, 0): DerivationTreeNode(8, "G"),
+            },
+        )
+
+        next_path = ()
+        paths = [()]
+        while True:
+            next_path = dtree.next_path(next_path)
+            if next_path is None:
+                break
+            else:
+                paths.append(next_path)
+
+        self.assertEqual(list(dtree.paths().keys()), paths)
+
+        self.assertEqual((1,), dtree.next_path((0, 0), skip_children=True))
+        self.assertEqual((0, 0, 1), dtree.next_path((0, 0, 0), skip_children=True))
+        self.assertEqual(None, dtree.next_path((), skip_children=True))
+
+    def test_new_ids(self):
+        dtree = DerivationTree(
+            init_map={
+                (): DerivationTreeNode(1, "A"),
+                (0,): DerivationTreeNode(2, "B"),
+                (0, 0): DerivationTreeNode(4, "A"),
+                (0, 0, 0): DerivationTreeNode(5, "B"),
+                (0, 0, 1): DerivationTreeNode(6, "D"),
+                (1,): DerivationTreeNode(3, "C"),
+                (1, 0): DerivationTreeNode(7, "F"),
+                (1, 0, 0): DerivationTreeNode(8, "G"),
+            },
+        )
+
+        new_tree = dtree.new_ids()
+        ids = {node.node_id for node in new_tree.paths().values()}
+        self.assertTrue(all(node_id > 8 for node_id in ids))
+        self.assertTrue(new_tree.structurally_equal(dtree))
+        self.assertNotEqual(new_tree, dtree)
+
+    def test_substitute(self):
+        tree = DerivationTree.from_parse_tree(("1", [
+            ("2", [("4", [])]),
+            ("3", [
+                ("5", [("7", [])]),
+                ("6", [])
+            ])
+        ]))
+
+        result = tree.substitute({
+            tree.get_subtree((0, 0)): DerivationTree.from_parse_tree(("8", [("9", [])])),
+            tree.get_subtree((1, 1)): DerivationTree.from_parse_tree(("10", []))
+        })
+
+        self.assertEqual(("1", [
+            ("2", [("8", [("9", [])])]),
+            ("3", [
+                ("5", [("7", [])]),
+                ("10", [])
+            ])
+        ]), result.to_parse_tree())
+
 
 def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
     stack: List[ParseTree] = []

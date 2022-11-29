@@ -90,7 +90,7 @@ class DerivationTree:
     def node(self, path: Path = ()) -> DerivationTreeNode:
         return self.__trie[self.__root_path + path_to_trie_key(path)[1:]]
 
-    def node_id(self, path: Path = ()) -> DerivationTreeNode:
+    def node_id(self, path: Path = ()) -> int:
         return self.__trie[self.__root_path + path_to_trie_key(path)[1:]].node_id
 
     def value(self, path: Path = ()) -> str:
@@ -456,29 +456,86 @@ class DerivationTree:
                 queue.append(child_path)
 
     def nonterminals(self) -> Set[str]:
-        # TODO
-        raise NotImplementedError
+        result: Set[str] = set()
+
+        def add_if_nonterminal(_: Path, node: DerivationTreeNode):
+            if is_nonterminal(node.value):
+                result.add(node.value)
+
+        self.traverse(action=add_if_nonterminal)
+
+        return result
 
     def terminals(self) -> Set[str]:
-        # TODO
-        raise NotImplementedError
+        result: Set[str] = set()
+
+        def add_if_terminal(_: Path, node: DerivationTreeNode):
+            if not is_nonterminal(node.value):
+                result.add(node.value)
+
+        self.traverse(action=add_if_terminal)
+
+        return result
 
     def next_path(self, path: Path, skip_children=False) -> Optional[Path]:
         """
-        Returns the next path in the tree. Repeated calls result in an iterator over the paths in the tree.
+        Returns the next path in the tree. Repeated calls result in an iterator
+        over the paths in the tree.
         """
-        # TODO
-        raise NotImplementedError
+
+        key = self.__root_path + path_to_trie_key(path)[1:]
+        suffixes = self.__trie.suffixes(key) if not skip_children else [""]
+
+        if suffixes == [""]:
+            while len(key) > 1:
+                next_sibling_path = key[:-1] + chr(ord(key[-1]) + 1)
+                if next_sibling_path in self.__trie:
+                    return path[:-1] + (path[-1] + 1,)
+
+                key = key[:-1]
+                path = path[:-1]
+
+            return None
+
+        return path + trie_key_to_path(chr(1) + suffixes[1])
 
     def new_ids(self) -> "DerivationTree":
-        # TODO
-        raise NotImplementedError
+        return DerivationTree(
+            init_map={
+                path_key: DerivationTreeNode(node_id=get_next_id(), value=node.value)
+                for path_key, node in self.__trie.items()
+            },
+            open_leaves=self.__open_leaves,
+            root_path=self.__root_path,
+        )
 
     def substitute(
         self, subst_map: Dict["DerivationTree", "DerivationTree"]
     ) -> "DerivationTree":
-        # TODO
-        raise NotImplementedError
+        # Looking up IDs performs much better for big trees, since we do not necessarily
+        # have to compute hashes for all nodes. We do not perform "nested" replacements
+        # since removing elements in replacements is not intended.
+        id_subst_map = {
+            tree.node_id(): repl
+            for tree, repl in subst_map.items()
+            if (
+                isinstance(tree, DerivationTree)
+                and all(
+                    repl.node_id() == tree.node_id()
+                    or repl.find_node(tree.node_id()) is None
+                    for otree, repl in subst_map.items()
+                    if isinstance(otree, DerivationTree)
+                )
+            )
+        }
+
+        result = self
+        for tree_id in id_subst_map:
+            path = result.find_node(tree_id)
+            if path is not None:
+                result = result.replace_path(path, id_subst_map[tree_id])
+
+        return result
 
     def is_prefix(self, other: "DerivationTree") -> bool:
         # TODO
