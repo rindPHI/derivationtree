@@ -1,9 +1,22 @@
 import copy
+import json
 import re
 import zlib
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Tuple, List, Optional, Dict, Iterable, Set, Generator, Callable
+from typing import (
+    Tuple,
+    List,
+    Optional,
+    Dict,
+    Iterable,
+    Set,
+    Generator,
+    Callable,
+    Union,
+    Iterator,
+    cast,
+)
 
 import datrie
 
@@ -40,14 +53,7 @@ class DerivationTree:
     ):
         assert init_map or init_trie
 
-        self.__trie: datrie.Trie = init_trie or datrie.Trie([chr(i) for i in range(32)])
-
-        for path, node_or_value in (init_map or {}).items():
-            self.__trie[path_to_trie_key(path) if isinstance(path, tuple) else path] = (
-                node_or_value
-                if isinstance(node_or_value, DerivationTreeNode)
-                else DerivationTreeNode(get_next_id(), node_or_value)
-            )
+        self.__trie = DerivationTree.trie_from_init_map(init_map, init_trie)
 
         self.__root_path = (
             path_to_trie_key(root_path)
@@ -63,8 +69,29 @@ class DerivationTree:
             )
         }
 
+        self.__k_paths: Dict[int, Set[Tuple[gg.Node, ...]]] = {}
+        self.__concrete_k_paths: Dict[int, Set[Tuple[gg.Node, ...]]] = {}
+
+    @staticmethod
+    def trie_from_init_map(
+        init_map: Optional[Dict[Path | str, DerivationTreeNode | str]] = None,
+        init_trie: Optional[datrie.Trie] = None,
+    ):
+        result: datrie.Trie = init_trie or datrie.Trie([chr(i) for i in range(32)])
+        for path, node_or_value in (init_map or {}).items():
+            result[path_to_trie_key(path) if isinstance(path, tuple) else path] = (
+                node_or_value
+                if isinstance(node_or_value, DerivationTreeNode)
+                else DerivationTreeNode(get_next_id(), node_or_value)
+            )
+
+        return result
+
     def node(self, path: Path = ()) -> DerivationTreeNode:
         return self.__trie[self.__root_path + path_to_trie_key(path)[1:]]
+
+    def node_id(self, path: Path = ()) -> DerivationTreeNode:
+        return self.__trie[self.__root_path + path_to_trie_key(path)[1:]].node_id
 
     def value(self, path: Path = ()) -> str:
         return self.__trie[self.__root_path + path_to_trie_key(path)[1:]].value
@@ -131,7 +158,7 @@ class DerivationTree:
         }
 
     def get_subtree(self, path: Path) -> "DerivationTree":
-        assert path_to_trie_key(path) in self.__trie
+        assert self.__root_path + path_to_trie_key(path)[1:] in self.__trie
         return DerivationTree(
             init_trie=self.__trie,
             root_path=self.__root_path + path_to_trie_key(path)[1:],
@@ -217,31 +244,86 @@ class DerivationTree:
         return DerivationTree.from_json(zlib.decompress(state).decode("UTF-8"), self)
 
     def to_json(self) -> str:
-        # TODO
-        raise NotImplementedError
+        the_dict = {
+            "init_map": dict(self.__trie.items()),
+            "open_leaves": tuple(self.__open_leaves),
+            "root_path": self.__root_path,
+        }
+
+        return json.dumps(the_dict, default=lambda o: o.__dict__)
 
     @staticmethod
     def from_json(
         json_str: str, tree: Optional["DerivationTree"] = None
     ) -> "DerivationTree":
-        # TODO
-        raise NotImplementedError
+        the_dict = json.loads(json_str)
+
+        init_map = {
+            key: DerivationTreeNode(node["node_id"], node["value"])
+            for key, node in the_dict["init_map"].items()
+        }
+
+        open_leaves = the_dict["open_leaves"]
+        root_path = the_dict["root_path"]
+
+        if tree is not None:
+            tree.__open_leaves = open_leaves
+            tree.__root_path = root_path
+            tree.__trie = DerivationTree.trie_from_init_map(init_map)
+            return tree
+
+        return DerivationTree(
+            init_map=init_map,
+            open_leaves=open_leaves,
+            root_path=root_path,
+        )
 
     def has_unique_ids(self) -> bool:
-        # TODO
-        raise NotImplementedError
-
-    def k_coverage(
-        self, graph: gg.GrammarGraph, k: int, include_potential_paths: bool = True
-    ) -> float:
-        # TODO
-        raise NotImplementedError
+        nodes = list(self.paths().values())
+        return all(
+            nodes[idx_1].node_id != nodes[idx_2].node_id
+            for idx_1 in range(len(nodes))
+            for idx_2 in range(idx_1 + 1, len(nodes))
+        )
 
     def k_paths(
         self, graph: gg.GrammarGraph, k: int, include_potential_paths: bool = True
     ) -> Set[Tuple[gg.Node, ...]]:
-        # TODO
-        raise NotImplementedError
+        if (
+            include_potential_paths
+            and k not in self.__k_paths
+            or not include_potential_paths
+            and k not in self.__concrete_k_paths
+        ):
+            paths = graph.k_paths_in_tree(
+                self,
+                k,
+                include_potential_paths=include_potential_paths,
+                include_terminals=False,
+            )
+
+            if include_potential_paths:
+                self.__k_paths[k] = paths
+            else:
+                self.__concrete_k_paths[k] = paths
+
+        if include_potential_paths:
+            return self.__k_paths[k]
+        else:
+            return self.__concrete_k_paths[k]
+
+    def k_coverage(
+        self, graph: gg.GrammarGraph, k: int, include_potential_paths: bool = True
+    ) -> float:
+        all_paths = graph.k_paths(k, include_terminals=False)
+        if not all_paths:
+            return 0
+
+        tree_paths = self.k_paths(
+            graph, k, include_potential_paths=include_potential_paths
+        )
+
+        return len(tree_paths) / len(all_paths)
 
     def root_nonterminal(self) -> str:
         assert is_nonterminal(self.value())
@@ -252,24 +334,92 @@ class DerivationTree:
         return 0 if children is None else len(children)
 
     def filter(
-        self, f: Callable[["DerivationTree"], bool], enforce_unique: bool = False
+        self, f: Callable[["DerivationTreeNode"], bool], enforce_unique: bool = False
     ) -> List[Tuple[Path, "DerivationTree"]]:
-        # TODO
-        raise NotImplementedError
+        result: List[Tuple[Path, "DerivationTree"]] = []
 
-    def find_node(self, node_or_id: "DerivationTree" | int) -> Optional[Path]:
-        # TODO
-        raise NotImplementedError
+        for path, node in self.paths().items():
+            if f(node):
+                result.append((path, self.get_subtree(path)))
+
+                if enforce_unique and len(result) > 1:
+                    raise RuntimeError(
+                        f"Found searched-for element more than once in {self}"
+                    )
+
+        return result
+
+    def find_node(self, node_or_id: Union[int, "DerivationTree"]) -> Optional[Path]:
+        """
+        Finds a node by its (assumed unique) ID. Returns the path relative to this node.
+
+        Attention: Might return an empty tuple, which indicates that the searched-for node
+        is the root of the tree! Don't use as in `if not find_node(...).`, use
+        `if find_node(...) is not None:`.
+
+        :param node_or_id: The node or node ID to search for.
+        :return: The path to the node or None.
+        """
+        if isinstance(node_or_id, DerivationTree):
+            node_or_id = node_or_id.node_id()
+
+        try:
+            return next(
+                path
+                for path, node in self.paths().items()
+                if node.node_id == node_or_id
+            )
+        except StopIteration:
+            return None
 
     def traverse(
         self,
-        action: Callable[[Path, "DerivationTree"], None],
-        abort_condition: Callable[[Path, "DerivationTree"], bool] = lambda p, n: False,
+        action: Callable[[Path, DerivationTreeNode], None],
+        abort_condition: Callable[
+            [Path, DerivationTreeNode], bool
+        ] = lambda p, n: False,
         kind: int = TRAVERSE_PREORDER,
         reverse: bool = False,
     ) -> None:
-        # TODO
-        raise NotImplementedError
+        if kind == DerivationTree.TRAVERSE_PREORDER:
+            paths: Iterator[Tuple[Path, DerivationTreeNode]] = cast(
+                Iterator[Tuple[Path, DerivationTreeNode]],
+                (
+                    iter(self.paths().items())
+                    if not reverse
+                    else reversed(tuple(self.paths().items()))
+                ),
+            )
+
+            for path, node in paths:
+                if abort_condition(path, node):
+                    return
+
+                action(path, node)
+
+            return
+
+        assert kind == DerivationTree.TRAVERSE_POSTORDER
+
+        # Special kind of iterative traversal for postorder. This is less efficient
+        # than preorder traversal, which is easy for tries since nodes are stored
+        # in preorder. Only choose postorder if you really need it.
+        stack_1: List[Path] = [()]
+        stack_2: List[Path] = []
+
+        while stack_1:
+            path = stack_1.pop()
+            stack_2.append(path)
+
+            num_children = len(self.children(path) or [])
+
+            for child_idx in range(num_children):
+                stack_1.append(path + (child_idx,))
+
+        for path in stack_2 if reverse else reversed(stack_2):
+            if abort_condition(path, self.node(path)):
+                break
+            action(path, self.node(path))
 
     def bfs(
         self,
@@ -314,10 +464,6 @@ class DerivationTree:
         # TODO
         raise NotImplementedError
 
-    def to_string(self, show_open_leaves: bool = False, show_ids: bool = False) -> str:
-        # TODO
-        raise NotImplementedError
-
     def to_dot(self) -> str:
         # TODO
         raise NotImplementedError
@@ -358,7 +504,12 @@ class DerivationTree:
                 else [self.get_subtree((idx,)) for idx in range(len(children))]
             )
 
+    def to_string(self, show_open_leaves: bool = False, show_ids: bool = False) -> str:
+        # TODO
+        raise NotImplementedError
+
     def __str__(self) -> str:
+        # TODO: Use to_string
         result_stack: List[str] = []
 
         for path in reversed(self.paths()):
