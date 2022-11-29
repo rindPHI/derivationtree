@@ -208,16 +208,12 @@ class TestDerivationTree(unittest.TestCase):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
         dtree = DerivationTree.from_parse_tree(parse_tree)
 
-        expected = (
-            "(DerivationTreeNode(node_id=XXX, value='A'), ["
-            + "(DerivationTreeNode(node_id=XXX, value='B'), []), "
-            + "(DerivationTreeNode(node_id=XXX, value='C'), ["
-            + "(DerivationTreeNode(node_id=XXX, value='D'), None), "
-            + "(DerivationTreeNode(node_id=XXX, value='E'), [])])])"
+        self.assertEqual("BDE", str(dtree))
+        self.assertEqual("BE", dtree.to_string(show_open_leaves=False))
+        self.assertEqual(
+            f"BD [{dtree.node_id((1, 0))}]E",
+            dtree.to_string(show_open_leaves=True, show_ids=True),
         )
-
-        regex = re.compile(r"node_id=" + "[0-9]+")
-        self.assertEqual(expected, regex.sub("node_id=XXX", str(dtree)))
 
     def test_tree_is_open(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
@@ -881,26 +877,100 @@ class TestDerivationTree(unittest.TestCase):
         self.assertNotEqual(new_tree, dtree)
 
     def test_substitute(self):
-        tree = DerivationTree.from_parse_tree(("1", [
-            ("2", [("4", [])]),
-            ("3", [
-                ("5", [("7", [])]),
-                ("6", [])
-            ])
-        ]))
+        tree = DerivationTree.from_parse_tree(
+            ("1", [("2", [("4", [])]), ("3", [("5", [("7", [])]), ("6", [])])])
+        )
 
-        result = tree.substitute({
-            tree.get_subtree((0, 0)): DerivationTree.from_parse_tree(("8", [("9", [])])),
-            tree.get_subtree((1, 1)): DerivationTree.from_parse_tree(("10", []))
-        })
+        result = tree.substitute(
+            {
+                tree.get_subtree((0, 0)): DerivationTree.from_parse_tree(
+                    ("8", [("9", [])])
+                ),
+                tree.get_subtree((1, 1)): DerivationTree.from_parse_tree(("10", [])),
+            }
+        )
 
-        self.assertEqual(("1", [
-            ("2", [("8", [("9", [])])]),
-            ("3", [
-                ("5", [("7", [])]),
-                ("10", [])
-            ])
-        ]), result.to_parse_tree())
+        self.assertEqual(
+            (
+                "1",
+                [("2", [("8", [("9", [])])]), ("3", [("5", [("7", [])]), ("10", [])])],
+            ),
+            result.to_parse_tree(),
+        )
+
+    def test_potential_prefix(self):
+        potential_prefix_tree = DerivationTree.from_parse_tree(
+            (
+                "<xml-tree>",
+                [
+                    ("<xml-open-tag>", [("<", []), ("<id>", None), (">", [])]),
+                    ("<xml-tree>", None),
+                    ("<xml-close-tag>", [("</", []), ("<id>", None), (">", [])]),
+                ],
+            )
+        )
+        other_tree = DerivationTree.from_parse_tree(
+            (
+                "<xml-tree>",
+                [
+                    ("<xml-open-tag>", None),
+                    ("<xml-tree>", None),
+                    ("<xml-close-tag>", None),
+                ],
+            )
+        )
+
+        self.assertTrue(other_tree.is_prefix(potential_prefix_tree))
+        self.assertFalse(potential_prefix_tree.is_prefix(other_tree))
+
+        self.assertTrue(potential_prefix_tree.is_potential_prefix(other_tree))
+        self.assertTrue(other_tree.is_potential_prefix(potential_prefix_tree))
+
+    def test_to_dot(self):
+        dtree = DerivationTree(
+            init_map={
+                "\x01": DerivationTreeNode(node_id=1, value="<xml-tree>"),
+                "\x01\x02": DerivationTreeNode(node_id=7, value="<xml-open-tag>"),
+                "\x01\x02\x02": DerivationTreeNode(node_id=10, value="<"),
+                "\x01\x02\x03": DerivationTreeNode(node_id=9, value="<id>"),
+                "\x01\x02\x04": DerivationTreeNode(node_id=8, value=">"),
+                "\x01\x03": DerivationTreeNode(node_id=6, value="<xml-tree>"),
+                "\x01\x04": DerivationTreeNode(node_id=2, value="<xml-close-tag>"),
+                "\x01\x04\x02": DerivationTreeNode(node_id=5, value="</"),
+                "\x01\x04\x03": DerivationTreeNode(node_id=4, value="<id>"),
+                "\x01\x04\x04": DerivationTreeNode(node_id=3, value=">"),
+            },
+            open_leaves={(1,), (0, 1), (2, 1)},
+        )
+
+        expected = r"""// Derivation Tree
+digraph {
+    node [shape=plain]
+    1 [label=<&lt;xml-tree&gt; <FONT COLOR="gray">(1)</FONT>>]
+    1 -> 7
+    1 -> 6
+    1 -> 2
+    7 [label=<&lt;xml-open-tag&gt; <FONT COLOR="gray">(7)</FONT>>]
+    7 -> 10
+    7 -> 9
+    7 -> 8
+    10 [label=<&lt; <FONT COLOR="gray">(10)</FONT>>]
+    9 [label=<&lt;id&gt; <FONT COLOR="gray">(9)</FONT>>]
+    8 [label=<&gt; <FONT COLOR="gray">(8)</FONT>>]
+    6 [label=<&lt;xml-tree&gt; <FONT COLOR="gray">(6)</FONT>>]
+    2 [label=<&lt;xml-close-tag&gt; <FONT COLOR="gray">(2)</FONT>>]
+    2 -> 5
+    2 -> 4
+    2 -> 3
+    5 [label=<&lt;/ <FONT COLOR="gray">(5)</FONT>>]
+    4 [label=<&lt;id&gt; <FONT COLOR="gray">(4)</FONT>>]
+    3 [label=<&gt; <FONT COLOR="gray">(3)</FONT>>]
+}
+""".replace(
+            "    ", "\t"
+        )
+
+        self.assertEqual(expected, str(dtree.to_dot()))
 
 
 def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:

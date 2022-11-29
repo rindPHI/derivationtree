@@ -1,4 +1,5 @@
 import copy
+import html
 import json
 import re
 import zlib
@@ -17,7 +18,7 @@ from typing import (
     Iterator,
     cast,
 )
-
+from graphviz import Digraph
 import datrie
 
 from grammar_graph import gg
@@ -88,13 +89,13 @@ class DerivationTree:
         return result
 
     def node(self, path: Path = ()) -> DerivationTreeNode:
-        return self.__trie[self.__root_path + path_to_trie_key(path)[1:]]
+        return self.__trie[self.__to_absolute_key(path_to_trie_key(path))]
 
     def node_id(self, path: Path = ()) -> int:
-        return self.__trie[self.__root_path + path_to_trie_key(path)[1:]].node_id
+        return self.__trie[self.__to_absolute_key(path_to_trie_key(path))].node_id
 
     def value(self, path: Path = ()) -> str:
-        return self.__trie[self.__root_path + path_to_trie_key(path)[1:]].value
+        return self.__trie[self.__to_absolute_key(path_to_trie_key(path))].value
 
     def children(self, path: Path = ()) -> Optional[List[DerivationTreeNode]]:
         if self.is_open(path):
@@ -110,7 +111,7 @@ class DerivationTree:
             try:
                 result.append(
                     self.__trie[
-                        self.__root_path + path_to_trie_key(path)[1:] + chr(i + 2)
+                        self.__to_absolute_key(path_to_trie_key(path)) + chr(i + 2)
                     ]
                 )
                 i += 1
@@ -121,12 +122,12 @@ class DerivationTree:
 
     def is_leaf(self, path: Path = ()) -> bool:
         return (
-            len(self.__trie.suffixes(self.__root_path + path_to_trie_key(path)[1:]))
+            len(self.__trie.suffixes(self.__to_absolute_key(path_to_trie_key(path))))
             == 1
         )
 
     def is_open(self, path: Path = ()) -> bool:
-        return self.__root_path + path_to_trie_key(path)[1:] in self.__open_leaves
+        return self.__to_absolute_key(path_to_trie_key(path)) in self.__open_leaves
 
     def is_complete(self, path: Path = ()) -> bool:
         return not self.is_open(path)
@@ -135,7 +136,7 @@ class DerivationTree:
         return bool(self.__open_leaves)
 
     def is_valid_path(self, path: Path) -> bool:
-        return self.__root_path + path_to_trie_key(path)[1:] in self.__trie
+        return self.__to_absolute_key(path_to_trie_key(path)) in self.__trie
 
     def paths(self) -> Dict[Path, DerivationTreeNode]:
         return {
@@ -153,15 +154,16 @@ class DerivationTree:
 
     def open_leaves(self) -> Dict[Path, DerivationTreeNode]:
         return {
-            trie_key_to_path(chr(1) + path[len(self.__root_path) :]): self.__trie[path]
-            for path in self.__open_leaves
+            trie_key_to_path(self.__to_relative_key(key)): self.__trie[key]
+            for key in self.__open_leaves
         }
 
     def get_subtree(self, path: Path) -> "DerivationTree":
-        assert self.__root_path + path_to_trie_key(path)[1:] in self.__trie
+        new_root_key = self.__to_absolute_key(path_to_trie_key(path))
+        assert new_root_key in self.__trie
         return DerivationTree(
             init_trie=self.__trie,
-            root_path=self.__root_path + path_to_trie_key(path)[1:],
+            root_path=new_root_key,
             open_leaves=self.__open_leaves,
         )
 
@@ -171,7 +173,7 @@ class DerivationTree:
         new_trie = copy.deepcopy(self.__trie)
         new_open_leaves = copy.deepcopy(self.__open_leaves)
 
-        key = self.__root_path + path_to_trie_key(path)[1:]
+        key = self.__to_absolute_key(path_to_trie_key(path))
 
         for old_suffix in self.__trie.suffixes(key):
             old_leaf_key = key + old_suffix
@@ -483,7 +485,7 @@ class DerivationTree:
         over the paths in the tree.
         """
 
-        key = self.__root_path + path_to_trie_key(path)[1:]
+        key = self.__to_absolute_key(path_to_trie_key(path))
         suffixes = self.__trie.suffixes(key) if not skip_children else [""]
 
         if suffixes == [""]:
@@ -538,18 +540,67 @@ class DerivationTree:
         return result
 
     def is_prefix(self, other: "DerivationTree") -> bool:
-        # TODO
-        raise NotImplementedError
+        if len(self) > len(other):
+            return False
+
+        for key, node in self.__trie.items():
+            value = node.value
+            relative_key = self.__to_relative_key(key)
+            absolute_other_key = other.__to_absolute_key(relative_key)
+
+            if absolute_other_key not in other.__trie:
+                return False
+
+            if value != other.__trie[absolute_other_key].value:
+                return False
+
+            if (
+                key not in self.__open_leaves
+                and len(self.__trie.suffixes(key)) == 1
+                and len(other.__trie.suffixes(absolute_other_key)) > 1
+            ):
+                return False
+
+        return True
 
     def is_potential_prefix(self, other: "DerivationTree") -> bool:
         # It's a potential prefix if for all common paths of the two trees, the leaves
         # are equal.
-        # TODO
-        raise NotImplementedError
+        common_relative_keys = {
+            self.__to_relative_key(key) for key in self.__trie.keys()
+        }.intersection(other.__to_relative_key(key) for key in other.__trie.keys())
+
+        for common_relative_key in common_relative_keys:
+            if (
+                self.__trie[self.__to_absolute_key(common_relative_key)].value
+                != other.__trie[other.__to_absolute_key(common_relative_key)].value
+            ):
+                return False
+
+        return True
+
+    def __to_relative_key(self, key: str) -> str:
+        return chr(1) + key[len(self.__root_path) :]
+
+    def __to_absolute_key(self, key: str) -> str:
+        return self.__root_path + key[1:]
 
     def to_dot(self) -> str:
-        # TODO
-        raise NotImplementedError
+        dot = Digraph(comment="Derivation Tree")
+        dot.attr("node", shape="plain")
+
+        for path, node in self.paths().items():
+            dot.node(
+                repr(node.node_id),
+                "<"
+                + html.escape(node.value)
+                + f' <FONT COLOR="gray">({node.node_id})</FONT>>',
+            )
+
+            for child_node in self.children(path) or []:
+                dot.edge(repr(node.node_id), repr(child_node.node_id))
+
+        return dot.source
 
     def __iter__(self) -> Generator[str | List["DerivationTree"] | None, None, None]:
         """
@@ -588,26 +639,22 @@ class DerivationTree:
             )
 
     def to_string(self, show_open_leaves: bool = False, show_ids: bool = False) -> str:
-        # TODO
-        raise NotImplementedError
+        result: List[str] = []
+        for path, node in self.leaves().items():
+            if self.is_open(path):
+                result.append(
+                    (f"{node.value} [{node.node_id}]" if show_ids else node.value)
+                    if show_open_leaves
+                    else ""
+                )
+            else:
+                assert not is_nonterminal(node.value)
+                result.append(node.value)
+
+        return "".join(result)
 
     def __str__(self) -> str:
-        # TODO: Use to_string
-        result_stack: List[str] = []
-
-        for path in reversed(self.paths()):
-            if self.is_open(path):
-                result_stack.append(f"({self.node(path)}, None)")
-            elif self.is_leaf(path):
-                result_stack.append(f"({self.node(path)}, [])")
-            else:
-                children = []
-                for _ in range(len(self.children(path))):
-                    children.append(result_stack.pop())
-                result_stack.append(f"({self.node(path)}, [{', '.join(children)}])")
-
-        assert len(result_stack) == 1
-        return result_stack[0]
+        return self.to_string(show_open_leaves=True)
 
     def __repr__(self) -> str:
         return (
