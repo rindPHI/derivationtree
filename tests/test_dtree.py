@@ -796,13 +796,13 @@ class TestDerivationTree(unittest.TestCase):
             action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=False
         )
 
-    def test_asdf(self):
+    def test_postorder_traversal_for_parse_tree_conversion(self):
         parse_tree = ("1", [("2", [("4", [])]), ("3", [("5", [("7", [])]), ("6", [])])])
         tree = DerivationTree.from_parse_tree(parse_tree)
-        self.assertEqual(parse_tree, legacy_to_parse_tree(tree))
+        self.assertEqual(parse_tree, traversal_to_parse_tree(tree))
 
 
-def legacy_to_parse_tree(tree: DerivationTree) -> ParseTree:
+def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
     stack: List[ParseTree] = []
 
     def action(path, node: DerivationTreeNode) -> None:
