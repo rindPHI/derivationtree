@@ -379,19 +379,13 @@ class DerivationTree:
             [Path, DerivationTreeNode], bool
         ] = lambda p, n: False,
         kind: int = TRAVERSE_PREORDER,
-        reverse: bool = False,
+        reversed_child_order: bool = False,
     ) -> None:
-        if kind == DerivationTree.TRAVERSE_PREORDER:
-            paths: Iterator[Tuple[Path, DerivationTreeNode]] = cast(
-                Iterator[Tuple[Path, DerivationTreeNode]],
-                (
-                    iter(self.paths().items())
-                    if not reverse
-                    else reversed(tuple(self.paths().items()))
-                ),
-            )
-
-            for path, node in paths:
+        if kind == DerivationTree.TRAVERSE_PREORDER and not reversed_child_order:
+            # Special iteration for preorder (with normal child order). Since nodes
+            # are stored in this order in tries, this is the most efficient kind
+            # of traversal.
+            for path, node in self.paths().items():
                 if abort_condition(path, node):
                     return
 
@@ -399,35 +393,67 @@ class DerivationTree:
 
             return
 
-        assert kind == DerivationTree.TRAVERSE_POSTORDER
+        assert kind == DerivationTree.TRAVERSE_POSTORDER or reversed_child_order
+        if kind == DerivationTree.TRAVERSE_PREORDER:
+            reversed_child_order = False
 
-        # Special kind of iterative traversal for postorder. This is less efficient
-        # than preorder traversal, which is easy for tries since nodes are stored
-        # in preorder. Only choose postorder if you really need it.
         stack_1: List[Path] = [()]
         stack_2: List[Path] = []
 
         while stack_1:
             path = stack_1.pop()
-            stack_2.append(path)
+            node = self.node(path)
+
+            if kind == DerivationTree.TRAVERSE_PREORDER and abort_condition(path, node):
+                return
+
+            if kind == DerivationTree.TRAVERSE_POSTORDER:
+                stack_2.append(path)
+
+            if kind == DerivationTree.TRAVERSE_PREORDER:
+                action(path, node)
 
             num_children = len(self.children(path) or [])
+            if num_children:
+                iterator = range(num_children)
 
-            for child_idx in range(num_children):
-                stack_1.append(path + (child_idx,))
+                for idx in reversed(iterator) if reversed_child_order else iterator:
+                    new_path = path + (idx,)
+                    stack_1.append(new_path)
 
-        for path in stack_2 if reverse else reversed(stack_2):
-            if abort_condition(path, self.node(path)):
-                break
-            action(path, self.node(path))
+        if kind == DerivationTree.TRAVERSE_POSTORDER:
+            while stack_2:
+                path = stack_2.pop()
+                node = self.node(path)
+                if abort_condition(path, node):
+                    return
+                action(path, node)
 
     def bfs(
         self,
-        action: Callable[[Path, "DerivationTree"], None],
-        abort_condition: Callable[[Path, "DerivationTree"], bool] = lambda p, n: False,
+        action: Callable[[Path, DerivationTreeNode], None],
+        abort_condition: Callable[
+            [Path, DerivationTreeNode], bool
+        ] = lambda p, n: False,
     ):
-        # TODO
-        raise NotImplementedError
+        queue: List[Path] = [()]  # FIFO queue
+        explored: Set[Path] = {()}
+
+        while queue:
+            path = queue.pop(0)
+            node = self.node(path)
+
+            if abort_condition(path, node):
+                return
+            action(path, node)
+
+            for child_idx in range(len(self.children(path) or [])):
+                child_path = path + (child_idx,)
+                if child_path in explored:
+                    continue
+
+                explored.add(child_path)
+                queue.append(child_path)
 
     def nonterminals(self) -> Set[str]:
         # TODO

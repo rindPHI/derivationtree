@@ -1,9 +1,9 @@
-import pickle
 import random
 import re
 import string
 import unittest
-from typing import Dict
+from typing import Dict, List
+
 from grammar_graph import gg
 
 from dtree import (
@@ -618,13 +618,18 @@ class TestDerivationTree(unittest.TestCase):
             paths.append(path)
 
         paths = []
-        dtree.traverse(action, kind=DerivationTree.TRAVERSE_PREORDER, reverse=False)
+        dtree.traverse(
+            action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=False
+        )
         self.assertEqual([(), (0,), (0, 0), (0, 0, 0), (0, 0, 1), (1,)], paths)
 
         paths = []
-        dtree.traverse(action, kind=DerivationTree.TRAVERSE_PREORDER, reverse=True)
+        dtree.traverse(
+            action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=True
+        )
         self.assertEqual(
-            list(reversed([(), (0,), (0, 0), (0, 0, 0), (0, 0, 1), (1,)])), paths
+            list([(), (1,), (0,), (0, 0), (0, 0, 1), (0, 0, 0)]),
+            paths,
         )
 
         paths = []
@@ -632,7 +637,7 @@ class TestDerivationTree(unittest.TestCase):
             action,
             abort_condition=lambda path, _: path == (0, 0, 0),
             kind=DerivationTree.TRAVERSE_PREORDER,
-            reverse=False,
+            reversed_child_order=False,
         )
         self.assertEqual([(), (0,), (0, 0)], paths)
 
@@ -655,7 +660,9 @@ class TestDerivationTree(unittest.TestCase):
             paths.append(path)
 
         paths = []
-        dtree.traverse(action, kind=DerivationTree.TRAVERSE_POSTORDER, reverse=False)
+        dtree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=False
+        )
         self.assertEqual(
             [
                 (0, 0),
@@ -672,23 +679,21 @@ class TestDerivationTree(unittest.TestCase):
         )
 
         paths = []
-        dtree.traverse(action, kind=DerivationTree.TRAVERSE_POSTORDER, reverse=True)
+        dtree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=True
+        )
         self.assertEqual(
-            list(
-                reversed(
-                    [
-                        (0, 0),
-                        (0, 1, 0),
-                        (0, 1, 1),
-                        (0, 1),
-                        (0,),
-                        (1, 0, 0),
-                        (1, 0),
-                        (1,),
-                        (),
-                    ]
-                )
-            ),
+            [
+                (1, 0, 0),
+                (1, 0),
+                (1,),
+                (0, 1, 1),
+                (0, 1, 0),
+                (0, 1),
+                (0, 0),
+                (0,),
+                (),
+            ],
             paths,
         )
 
@@ -697,7 +702,7 @@ class TestDerivationTree(unittest.TestCase):
             action,
             abort_condition=lambda path, _: path == (0, 1),
             kind=DerivationTree.TRAVERSE_POSTORDER,
-            reverse=False,
+            reversed_child_order=False,
         )
         self.assertEqual(
             [
@@ -707,6 +712,116 @@ class TestDerivationTree(unittest.TestCase):
             ],
             paths,
         )
+
+    def test_traverse_bfs(self):
+        dtree = DerivationTree(
+            init_map={
+                (): DerivationTreeNode(1, "A"),
+                (0,): DerivationTreeNode(2, "B"),
+                (1,): DerivationTreeNode(3, "C"),
+                (0, 0): DerivationTreeNode(4, "A"),
+                (0, 0, 0): DerivationTreeNode(5, "B"),
+                (0, 0, 1): DerivationTreeNode(6, "D"),
+                (1, 0): DerivationTreeNode(7, "F"),
+                (1, 0, 0): DerivationTreeNode(8, "G"),
+            },
+        )
+
+        def action(path: Path, _):
+            paths.append(path)
+
+        paths = []
+        dtree.bfs(action)
+        self.assertEqual(
+            [(), (0,), (1,), (0, 0), (1, 0), (0, 0, 0), (0, 0, 1), (1, 0, 0)], paths
+        )
+
+        paths = []
+        dtree.bfs(action, abort_condition=lambda path, _: path == (0, 0, 0))
+        self.assertEqual([(), (0,), (1,), (0, 0), (1, 0)], paths)
+
+    def test_traverse(self):
+        tree = DerivationTree.from_parse_tree(
+            ("1", [("2", [("4", [])]), ("3", [("5", [("7", [])]), ("6", [])])])
+        )
+
+        visited_nodes: List[int] = []
+
+        def action(path, node):
+            visited_nodes.append(int(node.value))
+
+        visited_nodes.clear()
+        tree.bfs(action)
+        self.assertEqual([1, 2, 3, 4, 5, 6, 7], visited_nodes)
+
+        visited_nodes.clear()
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=False
+        )
+        self.assertEqual([4, 2, 7, 5, 6, 3, 1], visited_nodes)
+
+        visited_nodes.clear()
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=True
+        )
+        self.assertEqual([6, 7, 5, 3, 4, 2, 1], visited_nodes)
+
+        visited_nodes.clear()
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=False
+        )
+        self.assertEqual([1, 2, 4, 3, 5, 7, 6], visited_nodes)
+
+        visited_nodes.clear()
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=True
+        )
+        self.assertEqual([1, 3, 6, 5, 7, 2, 4], visited_nodes)
+
+        def check_path(path, node):
+            self.assertEqual(node, tree.get_subtree(path).node())
+
+        tree.traverse(
+            check_path, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=True
+        )
+        tree.traverse(
+            check_path,
+            kind=DerivationTree.TRAVERSE_PREORDER,
+            reversed_child_order=False,
+        )
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=True
+        )
+        tree.traverse(
+            action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=False
+        )
+
+    def test_asdf(self):
+        parse_tree = ("1", [("2", [("4", [])]), ("3", [("5", [("7", [])]), ("6", [])])])
+        tree = DerivationTree.from_parse_tree(parse_tree)
+        self.assertEqual(parse_tree, legacy_to_parse_tree(tree))
+
+
+def legacy_to_parse_tree(tree: DerivationTree) -> ParseTree:
+    stack: List[ParseTree] = []
+
+    def action(path, node: DerivationTreeNode) -> None:
+        if tree.children(path) is None:
+            stack.append((node.value, None))
+        elif not tree.children(path):
+            stack.append((node.value, []))
+        else:
+            children: List[ParseTree] = []
+            for _ in range(len(tree.children(path))):
+                children.append(stack.pop())
+            stack.append((node.value, children))
+
+    tree.traverse(
+        action, kind=DerivationTree.TRAVERSE_POSTORDER, reversed_child_order=True
+    )
+
+    assert len(stack) == 1
+    return stack.pop()
 
 
 def dtree_paths_to_parse_tree_paths(
