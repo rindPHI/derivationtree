@@ -1,3 +1,23 @@
+# Copyright © 2022 CISPA Helmholtz Center for Information Security.
+# Author: Dominic Steinhöfel.
+#
+# This file is part of ISLa.
+#
+# ISLa is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# ISLa is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
+
+__version__ = "0.1.0"
+
 import copy
 import html
 import json
@@ -15,13 +35,11 @@ from typing import (
     Generator,
     Callable,
     Union,
-    Iterator,
-    cast,
 )
-from graphviz import Digraph
-import datrie
 
+import datrie
 from grammar_graph import gg
+from graphviz import Digraph
 
 Path = Tuple[int, ...]
 ParseTree = Tuple[str, Optional[List["ParseTree"]]]
@@ -374,6 +392,22 @@ class DerivationTree:
         except StopIteration:
             return None
 
+    def __traverse_preorder(
+        self,
+        action: Callable[[Path, DerivationTreeNode], None],
+        abort_condition: Callable[
+            [Path, DerivationTreeNode], bool
+        ] = lambda p, n: False,
+    ) -> None:
+        # Special iteration for preorder (with normal child order). Since nodes
+        # are stored in this order in tries, this is the most efficient kind
+        # of traversal.
+        for path, node in self.paths().items():
+            if abort_condition(path, node):
+                return
+
+            action(path, node)
+
     def traverse(
         self,
         action: Callable[[Path, DerivationTreeNode], None],
@@ -384,15 +418,7 @@ class DerivationTree:
         reversed_child_order: bool = False,
     ) -> None:
         if kind == DerivationTree.TRAVERSE_PREORDER and not reversed_child_order:
-            # Special iteration for preorder (with normal child order). Since nodes
-            # are stored in this order in tries, this is the most efficient kind
-            # of traversal.
-            for path, node in self.paths().items():
-                if abort_condition(path, node):
-                    return
-
-                action(path, node)
-
+            self.__traverse_preorder(action, abort_condition)
             return
 
         assert kind == DerivationTree.TRAVERSE_POSTORDER or reversed_child_order
@@ -415,21 +441,22 @@ class DerivationTree:
             if kind == DerivationTree.TRAVERSE_PREORDER:
                 action(path, node)
 
-            num_children = len(self.children(path) or [])
-            if num_children:
-                iterator = range(num_children)
+            num_children_iterator = range(len(self.children(path) or []))
 
-                for idx in reversed(iterator) if reversed_child_order else iterator:
-                    new_path = path + (idx,)
-                    stack_1.append(new_path)
+            for idx in (
+                reversed(num_children_iterator)
+                if reversed_child_order
+                else num_children_iterator
+            ):
+                new_path = path + (idx,)
+                stack_1.append(new_path)
 
-        if kind == DerivationTree.TRAVERSE_POSTORDER:
-            while stack_2:
-                path = stack_2.pop()
-                node = self.node(path)
-                if abort_condition(path, node):
-                    return
-                action(path, node)
+        while kind == DerivationTree.TRAVERSE_POSTORDER and stack_2:
+            path = stack_2.pop()
+            node = self.node(path)
+            if abort_condition(path, node):
+                return
+            action(path, node)
 
     def bfs(
         self,

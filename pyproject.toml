@@ -1,0 +1,35 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "setuptools-antlr",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "derivationtree"
+version = "0.1.0"
+authors = [
+    { name = "Dominic Steinhoefel", email = "dominic.steinhoefel@cispa.de" },
+]
+description = "An efficient derivation tree implementation for grammar fuzzing and other applications."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/rindPHI/derivationtree/"
+"Bug Tracker" = "https://github.com/rindPHI/derivationtree/issues"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']

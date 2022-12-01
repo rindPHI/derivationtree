@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from grammar_graph import gg
 
-from dtree import (
+from derivationtree import (
     ParseTree,
     Path,
     DerivationTree,
