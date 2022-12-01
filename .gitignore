@@ -1,2 +1,4 @@
 .idea/
+dist/
+src/derivationtree.egg-info/
 venv/
