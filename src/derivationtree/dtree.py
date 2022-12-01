@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = "0.1.0"
-
 import copy
 import html
 import json
