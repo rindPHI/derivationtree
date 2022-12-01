@@ -21,7 +21,7 @@ Steps to reproduce the behavior:
 A clear and concise description of what you expected to happen.
 
 **System/Installation Specs:**
- - ISLa Version: [e.g. 1.8.0]
+ - DerivationTree Version: [e.g. 0.1.0]
  - Python Version: [e.g. 3.10]
  - OS: [e.g. macOS]
 
