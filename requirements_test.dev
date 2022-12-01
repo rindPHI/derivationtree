@@ -1,0 +1,4 @@
+coverage>=6.5.0
+datrie>=0.8.2
+grammar-graph>=0.1.14
+graphviz>=0.20.1
