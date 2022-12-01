@@ -988,6 +988,58 @@ digraph {
 
         self.assertEqual(expected, str(dtree.to_dot()))
 
+    def test_insert_child(self):
+        dtree = DerivationTree.from_node("<start>")
+        self.assertTrue(dtree.is_open())
+        self.assertTrue(dtree.tree_is_open())
+
+        child_1 = DerivationTree.from_node("<A>")
+        child_2 = DerivationTree.from_node("<B>")
+
+        new_tree = dtree.replace_path((0,), child_1)
+        new_tree = new_tree.replace_path((1,), child_2)
+
+        self.assertFalse(new_tree.is_open())
+        self.assertTrue(new_tree.tree_is_open())
+        self.assertTrue(new_tree.is_open((0,)))
+        self.assertTrue(new_tree.is_open((1,)))
+
+        child_1 = DerivationTree.from_node("<A>", is_open=False)
+        new_tree = dtree.replace_path((0,), child_1)
+        self.assertFalse(new_tree.is_open())
+        self.assertFalse(new_tree.tree_is_open())
+
+    def test_replace_nonexisting_path(self):
+        dtree = DerivationTree.from_node("<start>")
+        try:
+            dtree.replace_path((0, 0), DerivationTree.from_node("<A>"))
+            self.fail("Exception expected")
+        except RuntimeError as err:
+            self.assertIn("no parent in the tree", str(err))
+
+    def test_add_children(self):
+        dtree = DerivationTree.from_node("<start>")
+        self.assertTrue(dtree.is_open())
+        self.assertTrue(dtree.tree_is_open())
+
+        child_1 = DerivationTree.from_node("<A>")
+        child_2 = DerivationTree.from_node("<B>", is_open=False)
+
+        new_tree = dtree.add_children([child_1, child_2])
+
+        self.assertFalse(new_tree.is_open())
+        self.assertTrue(new_tree.tree_is_open())
+        self.assertTrue(new_tree.is_open((0,)))
+        self.assertFalse(new_tree.is_open((1,)))
+
+    def test_add_children_to_inner_node(self):
+        dtree = DerivationTree({(): "<start>", (0,): "<A>", (0, 0): "<B>"})
+        try:
+            dtree.add_children([DerivationTree.from_node("<C>")], (0,))
+            self.fail("Exception expected")
+        except RuntimeError as err:
+            self.assertIn("Cannot add children to an inner node", str(err))
+
 
 def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
     stack: List[ParseTree] = []

@@ -33,6 +33,7 @@ from typing import (
     Generator,
     Callable,
     Union,
+    Sequence,
 )
 
 import datrie
@@ -88,6 +89,13 @@ class DerivationTree:
 
         self.__k_paths: Dict[int, Set[Tuple[gg.Node, ...]]] = {}
         self.__concrete_k_paths: Dict[int, Set[Tuple[gg.Node, ...]]] = {}
+
+    @staticmethod
+    def from_node(value: str, node_id: Optional[int] = None, is_open: bool = True):
+        return DerivationTree(
+            {(): DerivationTreeNode(node_id or get_next_id(), value)},
+            open_leaves={()} if is_open else set(),
+        )
 
     @staticmethod
     def trie_from_init_map(
@@ -183,13 +191,32 @@ class DerivationTree:
             open_leaves=self.__open_leaves,
         )
 
+    def add_children(
+        self, children: Sequence["DerivationTree"], path: Path = ()
+    ) -> "DerivationTree":
+        if len(self.__trie.suffixes(self.__to_absolute_key(path))) > 1:
+            raise RuntimeError("Cannot add children to an inner node")
+
+        result = self
+        for child_idx, child in enumerate(children):
+            result = result.replace_path(path + (child_idx,), child)
+        return result
+
     def replace_path(
         self, path: Path, replacement_tree: "DerivationTree"
     ) -> "DerivationTree":
+        key = self.__to_absolute_key(path_to_trie_key(path))
+
+        if key not in self.__trie and len(key) > 1 and key[:-1] not in self.__trie:
+            raise RuntimeError(
+                f"Cannot replace path {path}, which has no parent in the tree."
+            )
+
         new_trie = copy.deepcopy(self.__trie)
         new_open_leaves = copy.deepcopy(self.__open_leaves)
-
-        key = self.__to_absolute_key(path_to_trie_key(path))
+        new_open_leaves = new_open_leaves.difference(
+            {prefix for prefix in self.__trie.prefixes(key)}
+        )
 
         for old_suffix in self.__trie.suffixes(key):
             old_leaf_key = key + old_suffix
@@ -604,11 +631,19 @@ class DerivationTree:
 
         return True
 
-    def __to_relative_key(self, key: str) -> str:
-        return chr(1) + key[len(self.__root_path) :]
+    def __to_relative_key(self, key: str | Path) -> str:
+        return (
+            chr(1)
+            + (path_to_trie_key(key) if isinstance(key, tuple) else key)[
+                len(self.__root_path) :
+            ]
+        )
 
-    def __to_absolute_key(self, key: str) -> str:
-        return self.__root_path + key[1:]
+    def __to_absolute_key(self, key: str | Path) -> str:
+        return (
+            self.__root_path
+            + (path_to_trie_key(key) if isinstance(key, tuple) else key)[1:]
+        )
 
     def to_dot(self) -> str:
         dot = Digraph(comment="Derivation Tree")
