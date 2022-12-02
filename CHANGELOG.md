@@ -4,6 +4,10 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+### Changed
+
+- Removed possible too strict assertion in `DerivationTree.to_string` method
+
 ## [0.3.2]
 
 ### Changed

@@ -713,7 +713,6 @@ class DerivationTree:
                     else ""
                 )
             else:
-                assert not is_nonterminal(node.value)
                 result.append(node.value)
 
         return "".join(result)
