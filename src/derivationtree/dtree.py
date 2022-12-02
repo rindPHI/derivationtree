@@ -121,23 +121,21 @@ class DerivationTree:
     def value(self, path: Path = ()) -> str:
         return self.__trie[self.__to_absolute_key(path_to_trie_key(path))].value
 
-    def children(self, path: Path = ()) -> Optional[List[DerivationTreeNode]]:
+    def children(self, path: Path = ()) -> Optional[Dict[Path, DerivationTreeNode]]:
         if self.is_open(path):
             return None
 
         if self.is_leaf(path):
-            return []
+            return {}
 
-        result: List[DerivationTreeNode] = []
+        result: Dict[Path, DerivationTreeNode] = {}
 
         i = 0
         while True:
             try:
-                result.append(
-                    self.__trie[
-                        self.__to_absolute_key(path_to_trie_key(path)) + chr(i + 2)
-                    ]
-                )
+                child_key = self.__to_absolute_key(path_to_trie_key(path) + chr(i + 2))
+                child_path = path + (i,)
+                result[child_path] = self.__trie[child_key]
                 i += 1
             except KeyError:
                 break
@@ -657,7 +655,7 @@ class DerivationTree:
                 + f' <FONT COLOR="gray">({node.node_id})</FONT>>',
             )
 
-            for child_node in self.children(path) or []:
+            for child_node in (self.children(path) or {}).values():
                 dot.edge(repr(node.node_id), repr(child_node.node_id))
 
         return dot.source

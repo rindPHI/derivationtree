@@ -133,16 +133,21 @@ class TestDerivationTree(unittest.TestCase):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
         dtree = DerivationTree.from_parse_tree(parse_tree)
 
-        self.assertEqual(["B", "C"], [node.value for node in dtree.children()])
-        self.assertEqual(["D", "E"], [node.value for node in dtree.children((1,))])
+        self.assertEqual(["B", "C"], [node.value for node in dtree.children().values()])
+        self.assertEqual([(0,), (1,)], list(dtree.children().keys()))
         self.assertEqual(
-            ["D", "E"], [node.value for node in dtree.get_subtree((1,)).children()]
+            ["D", "E"], [node.value for node in dtree.children((1,)).values()]
+        )
+        self.assertEqual([(1, 0), (1, 1)], list(dtree.children((1,)).keys()))
+        self.assertEqual(
+            ["D", "E"],
+            [node.value for node in dtree.get_subtree((1,)).children().values()],
         )
 
-        self.assertEqual([], dtree.children((0,)))
+        self.assertEqual({}, dtree.children((0,)))
         self.assertEqual(None, dtree.children((1, 0)))
 
-        self.assertEqual([], dtree.get_subtree((0,)).children())
+        self.assertEqual({}, dtree.get_subtree((0,)).children())
         self.assertEqual(None, dtree.get_subtree((1, 0)).children())
 
     def test_is_leaf(self):

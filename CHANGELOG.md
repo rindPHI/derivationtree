@@ -4,6 +4,13 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.3.0]
+
+### Changed
+
+- Changed signature of `DerivationTree.children` method, which now returns a dictionary
+  of paths and nodes instead of only nodes.
+
 ## [0.2.0]
 
 ### Added
