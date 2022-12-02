@@ -4,11 +4,15 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.3.2]
+
 ### Changed
 
 - Made method `DerivationTree.trie_from_init_map` private (`__` prefix)
 - Method `DerivationTree.is_complete` now returns True iff the whole *tree*, and not
   only the root (or otherwise specified) node is not open.
+- Method `DerivationTree.filter` now returns a dict instead of a list of pairs.
+- Bug fix in `DerivationTree.replace_path` for trees with a non-trivial root path.
 
 ## [0.3.1]
 

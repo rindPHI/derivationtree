@@ -220,6 +220,28 @@ class TestDerivationTree(unittest.TestCase):
 
         self.assertEqual(expected, result.to_parse_tree())
 
+    def test_replace_path_in_tree_with_root_path(self):
+        dtree = DerivationTree(
+            init_map={
+                "\x01": DerivationTreeNode(node_id=6, value="<start>"),
+                "\x01\x02": DerivationTreeNode(node_id=7, value="<assgn>"),
+                "\x01\x02\x02": DerivationTreeNode(node_id=29, value="<var>"),
+                "\x01\x02\x03": DerivationTreeNode(node_id=28, value=" := "),
+                "\x01\x02\x04": DerivationTreeNode(node_id=8, value="<rhs>"),
+            },
+            open_leaves=set(),
+            root_path="\x01\x02",
+        )
+
+        self.assertEqual("<var>", dtree.value((0,)))
+
+        result = dtree.replace_path(
+            (0,), DerivationTree.from_node("<var>", is_open=True)
+        )
+
+        # No error; an assertion was added in `replace_path` to prevent the
+        # problem inspiring this test case.
+
     def test_repr(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
         dtree = DerivationTree.from_parse_tree(parse_tree)

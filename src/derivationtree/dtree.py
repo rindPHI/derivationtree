@@ -241,12 +241,14 @@ class DerivationTree:
 
         new_open_leaves.update(
             {
-                self.__root_path
-                + key[1:]
+                key
                 + new_leaf_key[len(replacement_tree.__root_path) :]
                 for new_leaf_key in replacement_tree.__open_leaves
             }
         )
+
+        for open_leaf in new_open_leaves:
+            assert open_leaf in new_trie
 
         return DerivationTree(
             init_trie=new_trie, root_path=self.__root_path, open_leaves=new_open_leaves
@@ -383,12 +385,12 @@ class DerivationTree:
 
     def filter(
         self, f: Callable[["DerivationTreeNode"], bool], enforce_unique: bool = False
-    ) -> List[Tuple[Path, "DerivationTree"]]:
-        result: List[Tuple[Path, "DerivationTree"]] = []
+    ) -> Dict[Path, "DerivationTree"]:
+        result: Dict[Path, "DerivationTree"] = {}
 
         for path, node in self.paths().items():
             if f(node):
-                result.append((path, self.get_subtree(path)))
+                result[path] = self.get_subtree(path)
 
                 if enforce_unique and len(result) > 1:
                     raise RuntimeError(
