@@ -71,7 +71,7 @@ class DerivationTree:
     ):
         assert init_map or init_trie
 
-        self.__trie = DerivationTree.trie_from_init_map(init_map, init_trie)
+        self.__trie = DerivationTree.__trie_from_init_map(init_map, init_trie)
 
         self.__root_path = (
             path_to_trie_key(root_path)
@@ -103,7 +103,7 @@ class DerivationTree:
         )
 
     @staticmethod
-    def trie_from_init_map(
+    def __trie_from_init_map(
         init_map: Optional[Dict[Path | str, DerivationTreeNode | str]] = None,
         init_trie: Optional[datrie.Trie] = None,
     ):
@@ -317,7 +317,7 @@ class DerivationTree:
         if tree is not None:
             tree.__open_leaves = open_leaves
             tree.__root_path = root_path
-            tree.__trie = DerivationTree.trie_from_init_map(init_map)
+            tree.__trie = DerivationTree.__trie_from_init_map(init_map)
             return tree
 
         return DerivationTree(

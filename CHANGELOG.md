@@ -4,6 +4,10 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+### Changed
+
+- Made method `trie_from_init_map` private (`__` prefix)
+
 ## [0.3.1]
 
 ### Changed
