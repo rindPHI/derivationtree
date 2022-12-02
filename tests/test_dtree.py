@@ -1022,6 +1022,12 @@ digraph {
         except RuntimeError as err:
             self.assertIn("no parent in the tree", str(err))
 
+    def test_from_node(self):
+        dtree = DerivationTree.from_node("<start>")
+        self.assertTrue(dtree.is_open())
+        dtree = DerivationTree.from_node("A")
+        self.assertFalse(dtree.is_open())
+
     def test_add_children(self):
         dtree = DerivationTree.from_node("<start>")
         self.assertTrue(dtree.is_open())

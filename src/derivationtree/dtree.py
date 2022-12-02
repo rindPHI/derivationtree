@@ -91,7 +91,12 @@ class DerivationTree:
         self.__concrete_k_paths: Dict[int, Set[Tuple[gg.Node, ...]]] = {}
 
     @staticmethod
-    def from_node(value: str, node_id: Optional[int] = None, is_open: bool = True):
+    def from_node(
+        value: str, node_id: Optional[int] = None, is_open: Optional[bool] = None
+    ):
+        if is_open is None:
+            is_open = is_nonterminal(value)
+
         return DerivationTree(
             {(): DerivationTreeNode(node_id or get_next_id(), value)},
             open_leaves={()} if is_open else set(),

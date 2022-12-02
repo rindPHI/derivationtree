@@ -4,6 +4,13 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.3.1]
+
+### Changed
+
+- `DerivationTree.from_node` infers optional `is_open` parameter from whether the given
+  value is a nonterminal or not.
+ 
 ## [0.3.0]
 
 ### Changed
