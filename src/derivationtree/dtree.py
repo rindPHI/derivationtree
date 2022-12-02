@@ -156,8 +156,8 @@ class DerivationTree:
     def is_open(self, path: Path = ()) -> bool:
         return self.__to_absolute_key(path_to_trie_key(path)) in self.__open_leaves
 
-    def is_complete(self, path: Path = ()) -> bool:
-        return not self.is_open(path)
+    def is_complete(self) -> bool:
+        return not self.tree_is_open()
 
     def tree_is_open(self):
         return bool(self.__open_leaves)

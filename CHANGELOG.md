@@ -6,7 +6,9 @@ This file contains the notable changes since version 0.1.0.
 
 ### Changed
 
-- Made method `trie_from_init_map` private (`__` prefix)
+- Made method `DerivationTree.trie_from_init_map` private (`__` prefix)
+- Method `DerivationTree.is_complete` now returns True iff the whole *tree*, and not
+  only the root (or otherwise specified) node is not open.
 
 ## [0.3.1]
 
