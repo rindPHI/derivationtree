@@ -4,9 +4,17 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.3.3]
+
 ### Changed
 
-- Removed possible too strict assertion in `DerivationTree.to_string` method
+- Fix in `DerivationTree.to_string` method; now, not displaying (closed) nonterminal
+  leaves
+- Don't use deep copy in `DerivationTree.replace_path`, but create new datrie object.
+  This is obviously more efficient. However, there should be a more (time & memory)
+  efficient way of replacing a leaf in a tree than copying the whole datrie...
+- More efficient `DerivationTree.__eq__` and `DerivationTree.is_leaf` methods
+- `DerivationTree.paths` can return mappings from datrie keys to nodes if requested 
 
 ## [0.3.2]
 

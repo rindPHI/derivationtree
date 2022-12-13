@@ -149,8 +149,10 @@ class DerivationTree:
 
     def is_leaf(self, path: Path = ()) -> bool:
         return (
-            len(self.__trie.suffixes(self.__to_absolute_key(path_to_trie_key(path))))
-            == 1
+            self.__trie.get(
+                self.__to_absolute_key(path_to_trie_key(path)) + "\x02", None
+            )
+            is None
         )
 
     def is_open(self, path: Path = ()) -> bool:
@@ -165,9 +167,22 @@ class DerivationTree:
     def is_valid_path(self, path: Path) -> bool:
         return self.__to_absolute_key(path_to_trie_key(path)) in self.__trie
 
-    def paths(self) -> Dict[Path, DerivationTreeNode]:
+    def paths(
+        self, convert_to_path: bool = True
+    ) -> Dict[Path | str, DerivationTreeNode]:
+        """
+        Returns a mapping from paths in this derivation tree to the corresponding
+        DerivationTreeNode. If `convert_to_path` is not True, the mapping contains
+        string keys (as stored in the underlying datrie object) instead of numeric paths.
+
+        :param convert_to_path: Set to False to represent paths as datrie string keys.
+        :return: A mapping from paths to nodes.
+        """
+
         return {
-            trie_key_to_path(chr(1) + suffix): self.__trie[self.__root_path + suffix]
+            trie_key_to_path(chr(1) + suffix)
+            if convert_to_path
+            else chr(1) + suffix: self.__trie[self.__root_path + suffix]
             for suffix in self.__trie.suffixes(self.__root_path)
         }
 
@@ -215,17 +230,18 @@ class DerivationTree:
                 f"Cannot replace path {path}, which has no parent in the tree."
             )
 
-        new_trie = copy.deepcopy(self.__trie)
-        new_open_leaves = copy.deepcopy(self.__open_leaves)
+        old_suffixes = {key + suffix for suffix in self.__trie.suffixes(key)}
+
+        new_open_leaves = set(self.__open_leaves)
         new_open_leaves = new_open_leaves.difference(
             {prefix for prefix in self.__trie.prefixes(key)}
-        )
+        ).difference(old_suffixes)
 
-        for old_suffix in self.__trie.suffixes(key):
-            old_leaf_key = key + old_suffix
-            del new_trie[old_leaf_key]
-            if old_leaf_key in new_open_leaves:
-                new_open_leaves.remove(old_leaf_key)
+        new_trie = datrie.Trie([chr(i) for i in range(32)])
+        for k, v in self.__trie.items():
+            if k in old_suffixes:
+                continue
+            new_trie[k] = v
 
         new_trie.update(
             {
@@ -241,8 +257,7 @@ class DerivationTree:
 
         new_open_leaves.update(
             {
-                key
-                + new_leaf_key[len(replacement_tree.__root_path) :]
+                key + new_leaf_key[len(replacement_tree.__root_path) :]
                 for new_leaf_key in replacement_tree.__open_leaves
             }
         )
@@ -713,7 +728,7 @@ class DerivationTree:
                     else ""
                 )
             else:
-                result.append(node.value)
+                result.append("" if is_nonterminal(node.value) else node.value)
 
         return "".join(result)
 
@@ -746,7 +761,7 @@ class DerivationTree:
         return (
             isinstance(other, DerivationTree)
             and len(self) == len(other)
-            and self.paths() == other.paths()
+            and self.paths(convert_to_path=False) == other.paths(convert_to_path=False)
             and self.open_leaves() == other.open_leaves()
         )
 
