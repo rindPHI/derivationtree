@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
 
-import copy
 import html
 import json
 import re
