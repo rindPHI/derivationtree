@@ -99,14 +99,9 @@ class Path:
             if not -len(self.__key) + 1 <= idx < len(self.__key) - 1:
                 raise IndexError
 
-            return (
-                ord(
-                    self.__key[idx + 1]
-                    if idx >= 0
-                    else self.__key[len(self.__key) + idx]
-                )
-                - 2
-            )
+            idx = idx + 1 if idx >= 0 else len(self.__key) + idx
+
+            return ord(self.__key[idx]) - 2
         else:
             elems = self.__key[1:][idx]
             return Path(chr(1) + elems)
@@ -114,16 +109,21 @@ class Path:
     def __iter__(self):
         class PathIterator:
             def __init__(self, key: str):
-                self.__idx = -1
+                self.__idx = 0
                 self.__key = key
 
             def __next__(self):
                 self.__idx += 1
 
-                if self.__idx < len(self.__key) - 1:
-                    return ord(self.__key[self.__idx + 1]) - 2
+                if self.__idx - 1 < len(self.__key) - 1:
+                    return ord(self.__key[self.__idx]) - 2
                 else:
                     raise StopIteration
+
+            def __getitem__(self, idx: int) -> int:
+                assert isinstance(idx, int)
+                idx = idx + 1 if idx >= 0 else len(self.__key) + idx
+                return ord(self.__key[self.__idx + idx]) - 2
 
         return PathIterator(self.__key)
 

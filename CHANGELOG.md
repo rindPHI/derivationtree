@@ -4,6 +4,12 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.4.1]
+
+### Changed
+
+- Implemented `PathIterator.__getitem__` to enable, e.g., unpacking of Paths
+
 ## [0.4.0]
 
 ### Changed

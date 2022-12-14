@@ -1246,6 +1246,29 @@ digraph {
         self.assertEqual(p[:-1], tuple(path[:-1]))
         self.assertEqual(p[1:50], tuple(path[1:50]))
 
+    def test_path_iterator_iterable(self):
+        path = Path(0, 1, 2)
+        car, *cdr = path
+        self.assertEqual(0, car)
+        self.assertEqual([1, 2], cdr)
+
+        path = Path(0)
+        car, *cdr = path
+        self.assertEqual(0, car)
+        self.assertEqual([], cdr)
+
+        path = Path(0, 1)
+        car, cdr = path
+        self.assertEqual(0, car)
+        self.assertEqual(1, cdr)
+
+        path = Path(0, 1, 2)
+        try:
+            car, cdr = path
+            self.fail("ValueError expected")
+        except ValueError:
+            pass
+
 
 def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
     stack: List[ParseTree] = []
