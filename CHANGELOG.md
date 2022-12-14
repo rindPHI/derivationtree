@@ -4,6 +4,19 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.4.0]
+
+### Changed
+
+- Using new `Path` objects instead of tuples for paths. This avoids the necessity to
+  convert between datrie string keys and numeric paths, the cost of which accumulates
+  over time.
+- More efficient `DerivationTree.replace_trie`
+- More efficient `DerivationTree.leaves`
+- More efficient `DerivationTree.find_node`
+- Fixed `DerivationTree.structural_hash`
+- Fixed `DerivationTree.is_potential_prefix`
+
 ## [0.3.3]
 
 ### Changed

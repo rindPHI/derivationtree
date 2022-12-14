@@ -16,20 +16,19 @@
 # You should have received a copy of the GNU General Public License
 # along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
 
-import random
 import string
 import unittest
 from typing import Dict, List
 
 from grammar_graph import gg
 
+import derivationtree.dtree
 from derivationtree import (
     ParseTree,
     Path,
     DerivationTree,
     DerivationTreeNode,
 )
-from derivationtree.dtree import trie_key_to_path, path_to_trie_key
 
 
 class TestDerivationTree(unittest.TestCase):
@@ -45,16 +44,16 @@ class TestDerivationTree(unittest.TestCase):
         paths = dict(parse_tree_paths(parse_tree))
         dtree = DerivationTree(init_map=paths)
 
-        sub_parse_tree_1 = get_subtree(parse_tree, (1,))
-        sub_dtree_1 = dtree.get_subtree((1,))
+        sub_parse_tree_1 = get_subtree(parse_tree, Path(1))
+        sub_dtree_1 = dtree.get_subtree(Path(1))
 
         self.assertEqual(
             parse_tree_paths(sub_parse_tree_1),
             dtree_paths_to_parse_tree_paths(sub_dtree_1.paths()),
         )
 
-        sub_parse_tree_2 = get_subtree(sub_parse_tree_1, (0,))
-        sub_dtree_2 = sub_dtree_1.get_subtree((0,))
+        sub_parse_tree_2 = get_subtree(sub_parse_tree_1, Path(0))
+        sub_dtree_2 = sub_dtree_1.get_subtree(Path(0))
 
         self.assertEqual(
             parse_tree_paths(sub_parse_tree_2),
@@ -71,19 +70,19 @@ class TestDerivationTree(unittest.TestCase):
         )
 
         self.assertEqual(
-            tree_leaves(get_subtree(parse_tree, (0,))),
-            dtree_paths_to_parse_tree_paths(dtree.get_subtree((0,)).leaves()),
+            tree_leaves(get_subtree(parse_tree, Path(0))),
+            dtree_paths_to_parse_tree_paths(dtree.get_subtree(Path(0)).leaves()),
         )
 
         self.assertEqual(
-            tree_leaves(get_subtree(parse_tree, (1,))),
-            dtree_paths_to_parse_tree_paths(dtree.get_subtree((1,)).leaves()),
+            tree_leaves(get_subtree(parse_tree, Path(1))),
+            dtree_paths_to_parse_tree_paths(dtree.get_subtree(Path(1)).leaves()),
         )
 
     def test_open_leaves(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
         paths = dict(parse_tree_paths(parse_tree))
-        dtree = DerivationTree(init_map=paths, open_leaves={(1, 0)})
+        dtree = DerivationTree(init_map=paths, open_leaves={Path(1, 0)})
 
         self.assertEqual(
             open_leaves(parse_tree),
@@ -91,18 +90,20 @@ class TestDerivationTree(unittest.TestCase):
         )
 
         self.assertEqual(
-            open_leaves(get_subtree(parse_tree, (0,))),
-            dtree_paths_to_parse_tree_paths(dtree.get_subtree((0,)).open_leaves()),
+            open_leaves(get_subtree(parse_tree, Path(0))),
+            dtree_paths_to_parse_tree_paths(dtree.get_subtree(Path(0)).open_leaves()),
         )
 
         self.assertEqual(
-            open_leaves(get_subtree(parse_tree, (1,))),
-            dtree_paths_to_parse_tree_paths(dtree.get_subtree((1,)).open_leaves()),
+            open_leaves(get_subtree(parse_tree, Path(1))),
+            dtree_paths_to_parse_tree_paths(dtree.get_subtree(Path(1)).open_leaves()),
         )
 
         self.assertEqual(
-            open_leaves(get_subtree(parse_tree, (1, 0))),
-            dtree_paths_to_parse_tree_paths(dtree.get_subtree((1, 0)).open_leaves()),
+            open_leaves(get_subtree(parse_tree, Path(1, 0))),
+            dtree_paths_to_parse_tree_paths(
+                dtree.get_subtree(Path(1, 0)).open_leaves()
+            ),
         )
 
     def test_from_parse_tree(self):
@@ -134,21 +135,28 @@ class TestDerivationTree(unittest.TestCase):
         dtree = DerivationTree.from_parse_tree(parse_tree)
 
         self.assertEqual(["B", "C"], [node.value for node in dtree.children().values()])
-        self.assertEqual([(0,), (1,)], list(dtree.children().keys()))
+        self.assertEqual([Path(0), Path(1)], list(dtree.children().keys()))
         self.assertEqual(
-            ["D", "E"], [node.value for node in dtree.children((1,)).values()]
+            ["D", "E"], [node.value for node in dtree.children(Path(1)).values()]
         )
-        self.assertEqual([(1, 0), (1, 1)], list(dtree.children((1,)).keys()))
+        self.assertEqual([Path(1, 0), Path(1, 1)], list(dtree.children(Path(1)).keys()))
         self.assertEqual(
             ["D", "E"],
-            [node.value for node in dtree.get_subtree((1,)).children().values()],
+            [node.value for node in dtree.get_subtree(Path(1)).children().values()],
         )
 
-        self.assertEqual({}, dtree.children((0,)))
-        self.assertEqual(None, dtree.children((1, 0)))
+        self.assertEqual({}, dtree.children(Path(0)))
+        self.assertEqual(None, dtree.children(Path(1, 0)))
 
-        self.assertEqual({}, dtree.get_subtree((0,)).children())
-        self.assertEqual(None, dtree.get_subtree((1, 0)).children())
+        self.assertEqual(
+            {},
+            dtree.get_subtree(
+                Path(
+                    0,
+                )
+            ).children(),
+        )
+        self.assertEqual(None, dtree.get_subtree(Path(1, 0)).children())
 
     def test_is_leaf(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
@@ -160,8 +168,8 @@ class TestDerivationTree(unittest.TestCase):
         for path in all_paths:
             self.assertEqual(path in leaf_paths, dtree.is_leaf(path))
 
-        sub_parse_tree = get_subtree(parse_tree, (1,))
-        sub_dtree = dtree.get_subtree((1,))
+        sub_parse_tree = get_subtree(parse_tree, Path(1))
+        sub_dtree = dtree.get_subtree(Path(1))
 
         all_paths = set(parse_tree_paths(sub_parse_tree))
         leaf_paths = set(tree_leaves(sub_parse_tree))
@@ -179,8 +187,8 @@ class TestDerivationTree(unittest.TestCase):
         for path in all_paths:
             self.assertEqual(path in open_paths, dtree.is_open(path))
 
-        sub_parse_tree = get_subtree(parse_tree, (1,))
-        sub_dtree = dtree.get_subtree((1,))
+        sub_parse_tree = get_subtree(parse_tree, Path(1))
+        sub_dtree = dtree.get_subtree(Path(1))
 
         all_paths = set(parse_tree_paths(sub_parse_tree))
         open_paths = set(open_leaves(sub_parse_tree))
@@ -201,42 +209,42 @@ class TestDerivationTree(unittest.TestCase):
         dtree = DerivationTree.from_parse_tree(parse_tree)
         replacement_dtree = DerivationTree.from_parse_tree(replacement_tree)
 
-        expected = replace_path(parse_tree, (1,), replacement_tree)
-        result = dtree.replace_path((1,), replacement_dtree)
+        expected = replace_path(parse_tree, Path(1), replacement_tree)
+        result = dtree.replace_path(Path(1), replacement_dtree)
 
         self.assertEqual(expected, result.to_parse_tree())
-        self.assertEqual(replacement_dtree, result.get_subtree((1,)))
+        self.assertEqual(replacement_dtree, result.get_subtree(Path(1)))
 
-        sub_tree = get_subtree(parse_tree, (1,))
-        sub_dtree = dtree.get_subtree((1,))
-        sub_replacement_tree = get_subtree(replacement_tree, (1, 0))
-        sub_replacement_dtree = replacement_dtree.get_subtree((1, 0))
+        sub_tree = get_subtree(parse_tree, Path(1))
+        sub_dtree = dtree.get_subtree(Path(1))
+        sub_replacement_tree = get_subtree(replacement_tree, Path(1, 0))
+        sub_replacement_dtree = replacement_dtree.get_subtree(Path(1, 0))
 
         self.assertEqual(sub_tree, sub_dtree.to_parse_tree())
         self.assertEqual(sub_replacement_tree, sub_replacement_dtree.to_parse_tree())
 
-        expected = replace_path(sub_tree, (1,), sub_replacement_tree)
-        result = sub_dtree.replace_path((1,), sub_replacement_dtree)
+        expected = replace_path(sub_tree, Path(1), sub_replacement_tree)
+        result = sub_dtree.replace_path(Path(1), sub_replacement_dtree)
 
         self.assertEqual(expected, result.to_parse_tree())
 
     def test_replace_path_in_tree_with_root_path(self):
         dtree = DerivationTree(
             init_map={
-                "\x01": DerivationTreeNode(node_id=6, value="<start>"),
-                "\x01\x02": DerivationTreeNode(node_id=7, value="<assgn>"),
-                "\x01\x02\x02": DerivationTreeNode(node_id=29, value="<var>"),
-                "\x01\x02\x03": DerivationTreeNode(node_id=28, value=" := "),
-                "\x01\x02\x04": DerivationTreeNode(node_id=8, value="<rhs>"),
+                Path(): DerivationTreeNode(node_id=6, value="<start>"),
+                Path(0): DerivationTreeNode(node_id=7, value="<assgn>"),
+                Path(0, 0): DerivationTreeNode(node_id=29, value="<var>"),
+                Path(0, 1): DerivationTreeNode(node_id=28, value=" := "),
+                Path(0, 2): DerivationTreeNode(node_id=8, value="<rhs>"),
             },
             open_leaves=set(),
-            root_path="\x01\x02",
+            root_path=Path(0),
         )
 
-        self.assertEqual("<var>", dtree.value((0,)))
+        self.assertEqual("<var>", dtree.value(Path(0)))
 
         result = dtree.replace_path(
-            (0,), DerivationTree.from_node("<var>", is_open=True)
+            Path(0), DerivationTree.from_node("<var>", is_open=True)
         )
 
         # No error; an assertion was added in `replace_path` to prevent the
@@ -254,7 +262,7 @@ class TestDerivationTree(unittest.TestCase):
         self.assertEqual("BDE", str(dtree))
         self.assertEqual("BE", dtree.to_string(show_open_leaves=False))
         self.assertEqual(
-            f"BD [{dtree.node_id((1, 0))}]E",
+            f"BD [{dtree.node_id(Path(1, 0))}]E",
             dtree.to_string(show_open_leaves=True, show_ids=True),
         )
 
@@ -263,10 +271,10 @@ class TestDerivationTree(unittest.TestCase):
         dtree = DerivationTree.from_parse_tree(parse_tree)
 
         self.assertTrue(dtree.tree_is_open())
-        self.assertTrue(dtree.get_subtree((1,)).tree_is_open())
-        self.assertTrue(dtree.get_subtree((1, 0)).tree_is_open())
-        self.assertFalse(dtree.get_subtree((0,)).tree_is_open())
-        self.assertFalse(dtree.get_subtree((1, 1)).tree_is_open())
+        self.assertTrue(dtree.get_subtree(Path(1)).tree_is_open())
+        self.assertTrue(dtree.get_subtree(Path(1, 0)).tree_is_open())
+        self.assertFalse(dtree.get_subtree(Path(0)).tree_is_open())
+        self.assertFalse(dtree.get_subtree(Path(1, 1)).tree_is_open())
 
     def test_unpack(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
@@ -278,11 +286,15 @@ class TestDerivationTree(unittest.TestCase):
         self.assertEqual(2, len(children))
         self.assertEqual(["B", "C"], [child.value() for child in children])
 
-        node, children = dtree.get_subtree((1, 0))
+        node, children = dtree.get_subtree(Path(1, 0))
         self.assertEqual("D", node)
         self.assertEqual(None, children)
 
-        node, children = dtree.get_subtree((0,))
+        node, children = dtree.get_subtree(
+            Path(
+                0,
+            )
+        )
         self.assertEqual("B", node)
         self.assertEqual([], children)
 
@@ -296,12 +308,16 @@ class TestDerivationTree(unittest.TestCase):
         self.assertEqual(2, len(children))
         self.assertEqual(["B", "C"], [child.value() for child in children])
 
-        subtree = dtree.get_subtree((1, 0))
+        subtree = dtree.get_subtree(Path(1, 0))
         node, children = subtree[0], subtree[1]
         self.assertEqual("D", node)
         self.assertEqual(None, children)
 
-        subtree = dtree.get_subtree((0,))
+        subtree = dtree.get_subtree(
+            Path(
+                0,
+            )
+        )
         node, children = subtree[0], subtree[1]
         self.assertEqual("B", node)
         self.assertEqual([], children)
@@ -314,118 +330,188 @@ class TestDerivationTree(unittest.TestCase):
 
     def test_hash(self):
         dtree_1 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         dtree_2 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         self.assertEqual(hash(dtree_1), hash(dtree_2))
 
         dtree_3 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(3, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(3, "B"),
+            }
         )
 
         self.assertNotEqual(hash(dtree_1), hash(dtree_3))
 
         dtree_4 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")},
-            open_leaves={(0,)},
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            },
+            open_leaves={Path(0)},
         )
 
         self.assertNotEqual(hash(dtree_1), hash(dtree_4))
 
     def test_structural_hash(self):
         dtree_1 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         dtree_2 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         self.assertEqual(dtree_1.structural_hash(), dtree_2.structural_hash())
 
         dtree_3 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(3, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(3, "B"),
+            }
         )
 
         self.assertEqual(dtree_1.structural_hash(), dtree_3.structural_hash())
 
         dtree_4 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")},
-            open_leaves={(0,)},
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            },
+            open_leaves={Path(0)},
         )
 
         self.assertNotEqual(dtree_1.structural_hash(), dtree_4.structural_hash())
 
+    def test_structural_hash_2(self):
+        tree_1 = DerivationTree(
+            init_map={
+                Path("\x01"): "<start>",
+                Path("\x01\x02"): "<stmt>",
+                Path("\x01\x02\x02"): "<assgn>",
+                Path("\x01\x02\x02\x02"): "<var>",
+                Path("\x01\x02\x02\x03"): " := ",
+                Path("\x01\x02\x02\x04"): "<rhs>",
+                Path("\x01\x02\x02\x04\x02"): "<digit>",
+            },
+            open_leaves={Path("\x01\x02\x02\x04\x02"), Path("\x01\x02\x02\x02")},
+        )
+        tree_2 = DerivationTree(
+            init_map={
+                Path("\x01"): "<start>",
+                Path("\x01\x02"): "<stmt>",
+                Path("\x01\x02\x02"): "<assgn>",
+                Path("\x01\x02\x02\x02"): "<var>",
+                Path("\x01\x02\x02\x03"): " := ",
+                Path("\x01\x02\x02\x04"): "<rhs>",
+                Path("\x01\x02\x02\x04\x02"): "<var>",
+            },
+            open_leaves={Path("\x01\x02\x02\x04\x02"), Path("\x01\x02\x02\x02")},
+        )
+        self.assertNotEqual(tree_1.structural_hash(), tree_2.structural_hash())
+
     def test_eq(self):
         dtree_1 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         dtree_2 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         self.assertEqual(dtree_1, dtree_2)
 
         dtree_3 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(3, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(3, "B"),
+            }
         )
 
         self.assertNotEqual(dtree_1, dtree_3)
 
         dtree_4 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")},
-            open_leaves={(0,)},
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            },
+            open_leaves={Path(0)},
         )
 
         self.assertNotEqual(dtree_1, dtree_4)
 
     def test_structurally_equal(self):
         dtree_1 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         dtree_2 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            }
         )
 
         self.assertTrue(dtree_1.structurally_equal(dtree_2))
 
         dtree_3 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(3, "B")}
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(3, "B"),
+            }
         )
 
         self.assertTrue(dtree_1.structurally_equal(dtree_3))
 
         dtree_4 = DerivationTree(
-            init_map={(): DerivationTreeNode(1, "A"), (0,): DerivationTreeNode(2, "B")},
-            open_leaves={(0,)},
+            init_map={
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+            },
+            open_leaves={
+                Path(
+                    0,
+                )
+            },
         )
 
         self.assertFalse(dtree_1.structurally_equal(dtree_4))
 
-    def test_trie_key_to_path(self):
-        for _ in range(30):
-            random_path = tuple(
-                [random.randint(0, 30) for _ in range(random.randint(1, 20))]
-            )
-            self.assertEqual(
-                random_path, trie_key_to_path(path_to_trie_key(random_path))
-            )
-
-        try:
-            trie_key_to_path("Hallo!")
-        except Exception as err:
-            self.assertIsInstance(err, RuntimeError)
-            self.assertIn("Invalid trie key", str(err))
-            self.assertIn("should start with 1", str(err))
-
     def test_path_index_out_of_range(self):
-        tree = DerivationTree(init_map={(): "A", (29,): "B"})
+        tree = DerivationTree(
+            init_map={
+                Path(): "A",
+                Path(
+                    29,
+                ): "B",
+            }
+        )
         self.assertEqual(2, len(tree.paths()))
 
         # For path indices larger than 29, the respective subtrees vanish.
@@ -433,56 +519,54 @@ class TestDerivationTree(unittest.TestCase):
         # particularity. If we want to support grammars with more than 30 (incl.
         # 0) direct children of a node, the vocabulary of the datrie structure
         # must be increased.
-        tree = DerivationTree(init_map={(): "A", (30,): "B"})
+        tree = DerivationTree(
+            init_map={
+                Path(): "A",
+                Path(
+                    30,
+                ): "B",
+            }
+        )
         self.assertEqual(1, len(tree.paths()))
         self.assertEqual(("A", []), tree.to_parse_tree())
 
     def test_to_from_json(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "D"),
-                (0, 0, 0): DerivationTreeNode(5, "E"),
-                (0, 0, 1): DerivationTreeNode(6, "F"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(0, 0): DerivationTreeNode(4, "D"),
+                Path(0, 0, 0): DerivationTreeNode(5, "E"),
+                Path(0, 0, 1): DerivationTreeNode(6, "F"),
             },
-            open_leaves={(1,), (0, 0, 0)},
+            open_leaves={
+                Path(1),
+                Path(0, 0, 0),
+            },
         )
 
         self.assertEqual(dtree, DerivationTree.from_json(dtree.to_json()))
 
-    def test_pickle_unpickle(self):
-        dtree = DerivationTree(
-            init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "D"),
-                (0, 0, 0): DerivationTreeNode(5, "E"),
-                (0, 0, 1): DerivationTreeNode(6, "F"),
-            },
-            open_leaves={(1,), (0, 0, 0)},
-        )
-
     def test_unique_ids(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "D"),
-                (0, 0, 0): DerivationTreeNode(5, "E"),
-                (0, 0, 1): DerivationTreeNode(6, "F"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(0, 0): DerivationTreeNode(4, "D"),
+                Path(0, 0, 0): DerivationTreeNode(5, "E"),
+                Path(0, 0, 1): DerivationTreeNode(6, "F"),
             },
-            open_leaves={(1,), (0, 0, 0)},
+            open_leaves={Path(1), Path(0, 0, 0)},
         )
 
         self.assertTrue(dtree.has_unique_ids())
 
         self.assertFalse(
             dtree.replace_path(
-                (0, 0), DerivationTree(init_map={(): DerivationTreeNode(3, "D")})
+                Path(0, 0),
+                DerivationTree(init_map={Path(): DerivationTreeNode(3, "D")}),
             ).has_unique_ids()
         )
 
@@ -602,14 +686,14 @@ class TestDerivationTree(unittest.TestCase):
     def test_filter(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 0, 0): DerivationTreeNode(5, "B"),
+                Path(0, 0, 1): DerivationTreeNode(6, "D"),
             },
-            open_leaves={(1,), (0, 0, 0)},
+            open_leaves={Path(1), Path(0, 0, 0)},
         )
 
         self.assertEqual(2, len(dtree.filter(lambda node: node.value == "B")))
@@ -626,30 +710,18 @@ class TestDerivationTree(unittest.TestCase):
             self.assertIn("more than once", str(exc))
 
     def test_find_start(self):
-        tree = DerivationTree(init_map={(): DerivationTreeNode(1, "<start>")})
-        self.assertEqual((), tree.find_node(1))
-
-    def test_find(self):
-        dtree = DerivationTree(
-            init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
-            },
-        )
+        tree = DerivationTree(init_map={Path(): DerivationTreeNode(1, "<start>")})
+        self.assertEqual(Path(), tree.find_node(1))
 
     def test_traverse_preorder(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 0, 0): DerivationTreeNode(5, "B"),
+                Path(0, 0, 1): DerivationTreeNode(6, "D"),
             },
         )
 
@@ -660,38 +732,40 @@ class TestDerivationTree(unittest.TestCase):
         dtree.traverse(
             action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=False
         )
-        self.assertEqual([(), (0,), (0, 0), (0, 0, 0), (0, 0, 1), (1,)], paths)
+        self.assertEqual(
+            [Path(), Path(0), Path(0, 0), Path(0, 0, 0), Path(0, 0, 1), Path(1)], paths
+        )
 
         paths = []
         dtree.traverse(
             action, kind=DerivationTree.TRAVERSE_PREORDER, reversed_child_order=True
         )
         self.assertEqual(
-            list([(), (1,), (0,), (0, 0), (0, 0, 1), (0, 0, 0)]),
+            list([Path(), Path(1), Path(0), Path(0, 0), Path(0, 0, 1), Path(0, 0, 0)]),
             paths,
         )
 
         paths = []
         dtree.traverse(
             action,
-            abort_condition=lambda path, _: path == (0, 0, 0),
+            abort_condition=lambda path, _: path == Path(0, 0, 0),
             kind=DerivationTree.TRAVERSE_PREORDER,
             reversed_child_order=False,
         )
-        self.assertEqual([(), (0,), (0, 0)], paths)
+        self.assertEqual([Path(), Path(0), Path(0, 0)], paths)
 
     def test_traverse_postorder(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "F"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "G"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 1): DerivationTreeNode(5, "D"),
-                (0, 1, 0): DerivationTreeNode(6, "C"),
-                (0, 1, 1): DerivationTreeNode(7, "E"),
-                (1, 0): DerivationTreeNode(8, "I"),
-                (1, 0, 0): DerivationTreeNode(9, "H"),
+                Path(): DerivationTreeNode(1, "F"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "G"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 1): DerivationTreeNode(5, "D"),
+                Path(0, 1, 0): DerivationTreeNode(6, "C"),
+                Path(0, 1, 1): DerivationTreeNode(7, "E"),
+                Path(1, 0): DerivationTreeNode(8, "I"),
+                Path(1, 0, 0): DerivationTreeNode(9, "H"),
             },
         )
 
@@ -704,15 +778,15 @@ class TestDerivationTree(unittest.TestCase):
         )
         self.assertEqual(
             [
-                (0, 0),
-                (0, 1, 0),
-                (0, 1, 1),
-                (0, 1),
-                (0,),
-                (1, 0, 0),
-                (1, 0),
-                (1,),
-                (),
+                Path(0, 0),
+                Path(0, 1, 0),
+                Path(0, 1, 1),
+                Path(0, 1),
+                Path(0),
+                Path(1, 0, 0),
+                Path(1, 0),
+                Path(1),
+                Path(),
             ],
             paths,
         )
@@ -723,15 +797,15 @@ class TestDerivationTree(unittest.TestCase):
         )
         self.assertEqual(
             [
-                (1, 0, 0),
-                (1, 0),
-                (1,),
-                (0, 1, 1),
-                (0, 1, 0),
-                (0, 1),
-                (0, 0),
-                (0,),
-                (),
+                Path(1, 0, 0),
+                Path(1, 0),
+                Path(1),
+                Path(0, 1, 1),
+                Path(0, 1, 0),
+                Path(0, 1),
+                Path(0, 0),
+                Path(0),
+                Path(),
             ],
             paths,
         )
@@ -739,15 +813,15 @@ class TestDerivationTree(unittest.TestCase):
         paths = []
         dtree.traverse(
             action,
-            abort_condition=lambda path, _: path == (0, 1),
+            abort_condition=lambda path, _: path == Path(0, 1),
             kind=DerivationTree.TRAVERSE_POSTORDER,
             reversed_child_order=False,
         )
         self.assertEqual(
             [
-                (0, 0),
-                (0, 1, 0),
-                (0, 1, 1),
+                Path(0, 0),
+                Path(0, 1, 0),
+                Path(0, 1, 1),
             ],
             paths,
         )
@@ -755,14 +829,14 @@ class TestDerivationTree(unittest.TestCase):
     def test_traverse_bfs(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (1,): DerivationTreeNode(3, "C"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
-                (1, 0): DerivationTreeNode(7, "F"),
-                (1, 0, 0): DerivationTreeNode(8, "G"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 0, 0): DerivationTreeNode(5, "B"),
+                Path(0, 0, 1): DerivationTreeNode(6, "D"),
+                Path(1, 0): DerivationTreeNode(7, "F"),
+                Path(1, 0, 0): DerivationTreeNode(8, "G"),
             },
         )
 
@@ -772,12 +846,22 @@ class TestDerivationTree(unittest.TestCase):
         paths = []
         dtree.bfs(action)
         self.assertEqual(
-            [(), (0,), (1,), (0, 0), (1, 0), (0, 0, 0), (0, 0, 1), (1, 0, 0)], paths
+            [
+                Path(),
+                Path(0),
+                Path(1),
+                Path(0, 0),
+                Path(1, 0),
+                Path(0, 0, 0),
+                Path(0, 0, 1),
+                Path(1, 0, 0),
+            ],
+            paths,
         )
 
         paths = []
-        dtree.bfs(action, abort_condition=lambda path, _: path == (0, 0, 0))
-        self.assertEqual([(), (0,), (1,), (0, 0), (1, 0)], paths)
+        dtree.bfs(action, abort_condition=lambda path, _: path == Path(0, 0, 0))
+        self.assertEqual([Path(), Path(0), Path(1), Path(0, 0), Path(1, 0)], paths)
 
     def test_traverse(self):
         tree = DerivationTree.from_parse_tree(
@@ -873,19 +957,19 @@ class TestDerivationTree(unittest.TestCase):
     def test_next_path(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
-                (1,): DerivationTreeNode(3, "C"),
-                (1, 0): DerivationTreeNode(7, "F"),
-                (1, 0, 0): DerivationTreeNode(8, "G"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 0, 0): DerivationTreeNode(5, "B"),
+                Path(0, 0, 1): DerivationTreeNode(6, "D"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(1, 0): DerivationTreeNode(7, "F"),
+                Path(1, 0, 0): DerivationTreeNode(8, "G"),
             },
         )
 
-        next_path = ()
-        paths = [()]
+        next_path = Path()
+        paths = [Path()]
         while True:
             next_path = dtree.next_path(next_path)
             if next_path is None:
@@ -895,24 +979,42 @@ class TestDerivationTree(unittest.TestCase):
 
         self.assertEqual(list(dtree.paths().keys()), paths)
 
-        self.assertEqual((1,), dtree.next_path((0, 0), skip_children=True))
-        self.assertEqual((0, 0, 1), dtree.next_path((0, 0, 0), skip_children=True))
-        self.assertEqual(None, dtree.next_path((), skip_children=True))
+        self.assertEqual(Path(1), dtree.next_path(Path(0, 0), skip_children=True))
+        self.assertEqual(
+            Path(0, 0, 1), dtree.next_path(Path(0, 0, 0), skip_children=True)
+        )
+        self.assertEqual(None, dtree.next_path(Path(), skip_children=True))
+
+    def test_next_path_2(self):
+        tree = DerivationTree(
+            init_map={
+                Path("\x01"): "<start>",
+                Path("\x01\x02"): "<csv-file>",
+                Path("\x01\x02\x02"): "<csv-header>",
+                Path("\x01\x02\x02\x02"): "<csv-record>",
+                Path("\x01\x02\x03"): "<csv-records>",
+            },
+            open_leaves={Path("\x01\x02\x02\x02")},
+            root_path=Path("\x01\x02\x02\x02"),
+        )
+
+        self.assertIsNone(tree.next_path(path=Path(), skip_children=False))
 
     def test_new_ids(self):
         dtree = DerivationTree(
             init_map={
-                (): DerivationTreeNode(1, "A"),
-                (0,): DerivationTreeNode(2, "B"),
-                (0, 0): DerivationTreeNode(4, "A"),
-                (0, 0, 0): DerivationTreeNode(5, "B"),
-                (0, 0, 1): DerivationTreeNode(6, "D"),
-                (1,): DerivationTreeNode(3, "C"),
-                (1, 0): DerivationTreeNode(7, "F"),
-                (1, 0, 0): DerivationTreeNode(8, "G"),
+                Path(): DerivationTreeNode(1, "A"),
+                Path(0): DerivationTreeNode(2, "B"),
+                Path(0, 0): DerivationTreeNode(4, "A"),
+                Path(0, 0, 0): DerivationTreeNode(5, "B"),
+                Path(0, 0, 1): DerivationTreeNode(6, "D"),
+                Path(1): DerivationTreeNode(3, "C"),
+                Path(1, 0): DerivationTreeNode(7, "F"),
+                Path(1, 0, 0): DerivationTreeNode(8, "G"),
             },
         )
 
+        derivationtree.dtree.next_id = 8
         new_tree = dtree.new_ids()
         ids = {node.node_id for node in new_tree.paths().values()}
         self.assertTrue(all(node_id > 8 for node_id in ids))
@@ -926,10 +1028,12 @@ class TestDerivationTree(unittest.TestCase):
 
         result = tree.substitute(
             {
-                tree.get_subtree((0, 0)): DerivationTree.from_parse_tree(
+                tree.get_subtree(Path(0, 0)): DerivationTree.from_parse_tree(
                     ("8", [("9", [])])
                 ),
-                tree.get_subtree((1, 1)): DerivationTree.from_parse_tree(("10", [])),
+                tree.get_subtree(Path(1, 1)): DerivationTree.from_parse_tree(
+                    ("10", [])
+                ),
             }
         )
 
@@ -972,18 +1076,20 @@ class TestDerivationTree(unittest.TestCase):
     def test_to_dot(self):
         dtree = DerivationTree(
             init_map={
-                "\x01": DerivationTreeNode(node_id=1, value="<xml-tree>"),
-                "\x01\x02": DerivationTreeNode(node_id=7, value="<xml-open-tag>"),
-                "\x01\x02\x02": DerivationTreeNode(node_id=10, value="<"),
-                "\x01\x02\x03": DerivationTreeNode(node_id=9, value="<id>"),
-                "\x01\x02\x04": DerivationTreeNode(node_id=8, value=">"),
-                "\x01\x03": DerivationTreeNode(node_id=6, value="<xml-tree>"),
-                "\x01\x04": DerivationTreeNode(node_id=2, value="<xml-close-tag>"),
-                "\x01\x04\x02": DerivationTreeNode(node_id=5, value="</"),
-                "\x01\x04\x03": DerivationTreeNode(node_id=4, value="<id>"),
-                "\x01\x04\x04": DerivationTreeNode(node_id=3, value=">"),
+                Path("\x01"): DerivationTreeNode(node_id=1, value="<xml-tree>"),
+                Path("\x01\x02"): DerivationTreeNode(node_id=7, value="<xml-open-tag>"),
+                Path("\x01\x02\x02"): DerivationTreeNode(node_id=10, value="<"),
+                Path("\x01\x02\x03"): DerivationTreeNode(node_id=9, value="<id>"),
+                Path("\x01\x02\x04"): DerivationTreeNode(node_id=8, value=">"),
+                Path("\x01\x03"): DerivationTreeNode(node_id=6, value="<xml-tree>"),
+                Path("\x01\x04"): DerivationTreeNode(
+                    node_id=2, value="<xml-close-tag>"
+                ),
+                Path("\x01\x04\x02"): DerivationTreeNode(node_id=5, value="</"),
+                Path("\x01\x04\x03"): DerivationTreeNode(node_id=4, value="<id>"),
+                Path("\x01\x04\x04"): DerivationTreeNode(node_id=3, value=">"),
             },
-            open_leaves={(1,), (0, 1), (2, 1)},
+            open_leaves={Path(1), Path(0, 1), Path(2, 1)},
         )
 
         expected = r"""// Derivation Tree
@@ -1023,23 +1129,23 @@ digraph {
         child_1 = DerivationTree.from_node("<A>")
         child_2 = DerivationTree.from_node("<B>")
 
-        new_tree = dtree.replace_path((0,), child_1)
-        new_tree = new_tree.replace_path((1,), child_2)
+        new_tree = dtree.replace_path(Path(0), child_1)
+        new_tree = new_tree.replace_path(Path(1), child_2)
 
         self.assertFalse(new_tree.is_open())
         self.assertTrue(new_tree.tree_is_open())
-        self.assertTrue(new_tree.is_open((0,)))
-        self.assertTrue(new_tree.is_open((1,)))
+        self.assertTrue(new_tree.is_open(Path(0)))
+        self.assertTrue(new_tree.is_open(Path(1)))
 
         child_1 = DerivationTree.from_node("<A>", is_open=False)
-        new_tree = dtree.replace_path((0,), child_1)
+        new_tree = dtree.replace_path(Path(0), child_1)
         self.assertFalse(new_tree.is_open())
         self.assertFalse(new_tree.tree_is_open())
 
     def test_replace_nonexisting_path(self):
         dtree = DerivationTree.from_node("<start>")
         try:
-            dtree.replace_path((0, 0), DerivationTree.from_node("<A>"))
+            dtree.replace_path(Path(0, 0), DerivationTree.from_node("<A>"))
             self.fail("Exception expected")
         except RuntimeError as err:
             self.assertIn("no parent in the tree", str(err))
@@ -1062,16 +1168,83 @@ digraph {
 
         self.assertFalse(new_tree.is_open())
         self.assertTrue(new_tree.tree_is_open())
-        self.assertTrue(new_tree.is_open((0,)))
-        self.assertFalse(new_tree.is_open((1,)))
+        self.assertTrue(new_tree.is_open(Path(0)))
+        self.assertFalse(
+            new_tree.is_open(
+                Path(
+                    1,
+                )
+            )
+        )
 
     def test_add_children_to_inner_node(self):
-        dtree = DerivationTree({(): "<start>", (0,): "<A>", (0, 0): "<B>"})
+        dtree = DerivationTree({Path(): "<start>", Path(0): "<A>", Path(0, 0): "<B>"})
         try:
-            dtree.add_children([DerivationTree.from_node("<C>")], (0,))
+            dtree.add_children([DerivationTree.from_node("<C>")], Path(0))
             self.fail("Exception expected")
         except RuntimeError as err:
             self.assertIn("Cannot add children to an inner node", str(err))
+
+    def test_path_eq(self):
+        p = (0, 2, 4, 1, 3)
+        path_1 = Path(p)
+        self.assertEqual(str(p), str(path_1))
+
+        path_2 = Path(chr(1) + "".join([chr(elem + 2) for elem in p]))
+        self.assertEqual(path_1, path_2)
+
+        path_3 = Path(*p)
+        self.assertEqual(path_1, path_3)
+
+    def test_path_len(self):
+        p = (0, 2, 4, 1, 3)
+        path = Path(p)
+        self.assertEqual(len(p), len(path))
+
+    def test_path_add(self):
+        p = (0, 2, 4, 1, 3)
+        self.assertEqual(Path(p + (1, 2)), Path(p) + (1, 2))
+        self.assertEqual(Path(p + (1,)), Path(p) + chr(3))
+
+    def test_path_getitem(self):
+        p = (0, 2, 4, 1, 3)
+        path = Path(p)
+
+        for i in range(len(p)):
+            self.assertEqual(p[i], path[i])
+
+        for i in range(-len(p), 0):
+            self.assertEqual(p[i], path[i])
+
+        for i in list(range(len(p), len(p) + 3)) + list(range(-len(p) - 3, -len(p))):
+            try:
+                print(p[i])
+                self.fail(f"IndexError Expected at index {i}")
+            except IndexError:
+                pass
+
+            try:
+                print(path[i])
+                self.fail(f"IndexError Expected at index {i}")
+            except IndexError:
+                pass
+
+    def test_path_iter(self):
+        p = (0, 2, 4, 1, 3)
+        path = Path(p)
+        self.assertEqual(p, tuple(path))
+
+    def test_path_slice(self):
+        p = (0, 2, 4, 1, 3)
+        path = Path(p)
+
+        self.assertIsInstance(path[1:3], Path)
+
+        self.assertEqual(p[1:3], tuple(path[1:3]))
+        self.assertEqual(p[1:], tuple(path[1:]))
+        self.assertEqual(p[:3], tuple(path[:3]))
+        self.assertEqual(p[:-1], tuple(path[:-1]))
+        self.assertEqual(p[1:50], tuple(path[1:50]))
 
 
 def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
@@ -1105,10 +1278,10 @@ def dtree_paths_to_parse_tree_paths(
 def parse_tree_paths(parse_tree: ParseTree) -> Dict[Path, str]:
     node, children = parse_tree
     if not children:
-        return {(): node}
+        return {Path(): node}
 
-    return {(): node} | {
-        (child_idx,) + child_path: child_node
+    return {Path(): node} | {
+        Path((child_idx,)) + child_path: child_node
         for child_idx in range(len(children))
         for child_path, child_node in parse_tree_paths(children[child_idx]).items()
     }
