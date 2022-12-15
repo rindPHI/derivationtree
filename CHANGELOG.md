@@ -4,6 +4,13 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.4.3]
+
+### Changed
+
+- `DerivationTree.paths`,`DerivationTree.leaves`, and `DerivationTree.open_leaves` now
+  return generators instead of whole dictionaries for better performance.
+
 ## [0.4.2]
 
 ### Changed

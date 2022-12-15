@@ -17,6 +17,7 @@
 # along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
 
 import html
+import itertools
 import json
 import re
 import zlib
@@ -283,7 +284,7 @@ class DerivationTree:
     def is_valid_path(self, path: Path) -> bool:
         return self.__to_absolute_key(path).key() in self.__trie
 
-    def paths(self) -> Dict[Path, DerivationTreeNode]:
+    def paths(self) -> Generator[Tuple[Path, DerivationTreeNode], None, None]:
         """
         Returns a mapping from paths in this derivation tree to the corresponding
         DerivationTreeNode.
@@ -291,27 +292,39 @@ class DerivationTree:
         :return: A mapping from paths to nodes.
         """
 
-        return {
-            Path(chr(1) + suffix): self.__trie[(self.__root_path + suffix).key()]
-            for suffix in self.__trie.suffixes(self.__root_path.key())
-        }
+        state = datrie.State(self.__trie)
+        state.walk(self.__root_path.key())
+        it = datrie.Iterator(state)
+        while it.next():
+            yield Path(chr(1) + it.key()), it.data()
 
-    @lru_cache
-    def leaves(self) -> Dict[Path, DerivationTreeNode]:
+        # return {
+        #     Path(chr(1) + suffix): self.__trie[(self.__root_path + suffix).key()]
+        #     for suffix in self.__trie.suffixes(self.__root_path.key())
+        # }
+
+    def leaves(self) -> Generator[Tuple[Path, DerivationTreeNode], None, None]:
         def is_leaf(key: Path) -> bool:
             return self.__trie.get((key + (0,)).key(), None) is None
 
-        return {
-            Path(chr(1) + suffix): self.__trie[(self.__root_path + suffix).key()]
-            for suffix in self.__trie.suffixes(self.__root_path.key())
-            if is_leaf(self.__root_path + suffix)
-        }
+        state = datrie.State(self.__trie)
+        state.walk(self.__root_path.key())
+        it = datrie.Iterator(state)
+        while it.next():
+            if is_leaf(self.__root_path + it.key()):
+                yield Path(chr(1) + it.key()), it.data()
 
-    def open_leaves(self) -> Dict[Path, DerivationTreeNode]:
-        return {
-            self.__to_relative_key(key): self.__trie[key.key()]
+        # return {
+        #     Path(chr(1) + suffix): self.__trie[(self.__root_path + suffix).key()]
+        #     for suffix in self.__trie.suffixes(self.__root_path.key())
+        #     if is_leaf(self.__root_path + suffix)
+        # }
+
+    def open_leaves(self) -> Generator[Tuple[Path, DerivationTreeNode], None, None]:
+        return (
+            (self.__to_relative_key(key), self.__trie[key.key()])
             for key in self.__open_leaves
-        }
+        )
 
     def get_subtree(self, path: Path) -> "DerivationTree":
         new_root_key = self.__to_absolute_key(path)
@@ -406,16 +419,16 @@ class DerivationTree:
     def to_parse_tree(self) -> ParseTree:
         result_stack: List[ParseTree] = []
 
-        for path in reversed(self.paths()):
+        for path, node in reversed(list(self.paths())):
             if self.is_open(path):
-                result_stack.append((self.node(path).value, None))
+                result_stack.append((node.value, None))
             elif self.is_leaf(path):
-                result_stack.append((self.node(path).value, []))
+                result_stack.append((node.value, []))
             else:
                 children = []
                 for _ in range(len(self.children(path))):
                     children.append(result_stack.pop())
-                result_stack.append((self.node(path).value, children))
+                result_stack.append((node.value, children))
 
         assert len(result_stack) == 1
         return result_stack[0]
@@ -462,7 +475,7 @@ class DerivationTree:
         )
 
     def has_unique_ids(self) -> bool:
-        nodes = list(self.paths().values())
+        nodes = [node for _, node in self.paths()]
         return all(
             nodes[idx_1].node_id != nodes[idx_2].node_id
             for idx_1 in range(len(nodes))
@@ -521,7 +534,7 @@ class DerivationTree:
     ) -> Dict[Path, "DerivationTree"]:
         result: Dict[Path, "DerivationTree"] = {}
 
-        for path, node in self.paths().items():
+        for path, node in self.paths():
             if f(node):
                 result[path] = self.get_subtree(path)
 
@@ -547,9 +560,7 @@ class DerivationTree:
             node_or_id = node_or_id.node_id()
 
         try:
-            return next(
-                key for key, node in self.paths().items() if node.node_id == node_or_id
-            )
+            return next(key for key, node in self.paths() if node.node_id == node_or_id)
         except StopIteration:
             return None
 
@@ -563,7 +574,7 @@ class DerivationTree:
         # Special iteration for preorder (with normal child order). Since nodes
         # are stored in this order in tries, this is the most efficient kind
         # of traversal.
-        for path, node in self.paths().items():
+        for path, node in self.paths():
             if abort_condition(path, node):
                 return
 
@@ -788,7 +799,7 @@ class DerivationTree:
         dot = Digraph(comment="Derivation Tree")
         dot.attr("node", shape="plain")
 
-        for path, node in self.paths().items():
+        for path, node in self.paths():
             dot.node(
                 repr(node.node_id),
                 "<"
@@ -839,7 +850,7 @@ class DerivationTree:
 
     def to_string(self, show_open_leaves: bool = False, show_ids: bool = False) -> str:
         result: List[str] = []
-        for path, node in self.leaves().items():
+        for path, node in self.leaves():
             if self.is_open(path):
                 result.append(
                     (f"{node.value} [{node.node_id}]" if show_ids else node.value)
@@ -866,14 +877,14 @@ class DerivationTree:
         return len(self.__trie.suffixes(self.__root_path.key()))
 
     def __hash__(self):
-        return hash((tuple(self.paths().items()), tuple(self.open_leaves().items())))
+        return hash((tuple(self.paths()), tuple(self.open_leaves())))
 
     def structural_hash(self):
         return hash(
             (
-                tuple([(path, node.value) for path, node in self.paths().items()]),
+                tuple([(path, node.value) for path, node in self.paths()]),
                 tuple(
-                    [(path, node.value) for path, node in self.open_leaves().items()]
+                    [(path, node.value) for path, node in self.open_leaves()]
                 ),
             )
         )
@@ -881,18 +892,20 @@ class DerivationTree:
     def __eq__(self, other) -> bool:
         return (
             isinstance(other, DerivationTree)
-            and len(self) == len(other)
-            and self.open_leaves() == other.open_leaves()
-            and self.paths() == other.paths()
+            and iterators_equal(self.open_leaves(), other.open_leaves())
+            and iterators_equal(self.paths(), other.paths())
         )
 
     def structurally_equal(self, other) -> bool:
         return (
             isinstance(other, DerivationTree)
-            and len(self) == len(other)
-            and self.paths().keys() == other.paths().keys()
-            and self.open_leaves().keys() == other.open_leaves().keys()
-            and all(self.value(path) == other.value(path) for path in self.paths())
+            and iterators_equal(self.open_leaves(), other.open_leaves())
+            and all(
+                (p1, v1.value) == (p2, v2.value)
+                for (p1, v1), (p2, v2) in itertools.zip_longest(
+                    self.paths(), other.paths()
+                )
+            )
         )
 
 
@@ -902,3 +915,10 @@ RE_NONTERMINAL = re.compile(r"(<[^<> ]*>)")
 @lru_cache(maxsize=None)
 def is_nonterminal(s):
     return RE_NONTERMINAL.match(s)
+
+
+def iterators_equal(iterator_1, iterator_2) -> bool:
+    return all(
+        elem_1 == elem_2
+        for elem_1, elem_2 in itertools.zip_longest(iterator_1, iterator_2)
+    )

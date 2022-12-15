@@ -18,7 +18,7 @@
 import random
 import string
 import unittest
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Generator, Tuple
 
 from grammar_graph import gg
 
@@ -571,7 +571,7 @@ class TestDerivationTree(unittest.TestCase):
                 ): "B",
             }
         )
-        self.assertEqual(2, len(tree.paths()))
+        self.assertEqual(2, len(list(tree.paths())))
 
         # For path indices larger than 29, the respective subtrees vanish.
         # That's not really a feature; this test case means to document that
@@ -586,7 +586,7 @@ class TestDerivationTree(unittest.TestCase):
                 ): "B",
             }
         )
-        self.assertEqual(1, len(tree.paths()))
+        self.assertEqual(1, len(list(tree.paths())))
         self.assertEqual(("A", []), tree.to_parse_tree())
 
     def test_to_from_json(self):
@@ -763,7 +763,7 @@ class TestDerivationTree(unittest.TestCase):
 
         try:
             dtree.filter(lambda node: node.value == "B", enforce_unique=True)
-            self.fail("Error excpected")
+            self.fail("Error expected")
         except Exception as exc:
             self.assertIsInstance(exc, RuntimeError)
             self.assertIn("more than once", str(exc))
@@ -1036,7 +1036,7 @@ class TestDerivationTree(unittest.TestCase):
             else:
                 paths.append(next_path)
 
-        self.assertEqual(list(dtree.paths().keys()), paths)
+        self.assertEqual([key for key, _ in dtree.paths()], paths)
 
         self.assertEqual(Path(1), dtree.next_path(Path(0, 0), skip_children=True))
         self.assertEqual(
@@ -1075,7 +1075,7 @@ class TestDerivationTree(unittest.TestCase):
 
         derivationtree.dtree.next_id = 8
         new_tree = dtree.new_ids()
-        ids = {node.node_id for node in new_tree.paths().values()}
+        ids = {node.node_id for _, node in new_tree.paths()}
         self.assertTrue(all(node_id > 8 for node_id in ids))
         self.assertTrue(new_tree.structurally_equal(dtree))
         self.assertNotEqual(new_tree, dtree)
@@ -1352,9 +1352,9 @@ def traversal_to_parse_tree(tree: DerivationTree) -> ParseTree:
 
 
 def dtree_paths_to_parse_tree_paths(
-    dtree_paths: Dict[Path, DerivationTreeNode]
+    dtree_paths: Generator[Tuple[Path, DerivationTreeNode], None, None]
 ) -> Dict[Path, str]:
-    return {path: node.value for path, node in dtree_paths.items()}
+    return {path: node.value for path, node in dtree_paths}
 
 
 def parse_tree_paths(parse_tree: ParseTree) -> Dict[Path, str]:
