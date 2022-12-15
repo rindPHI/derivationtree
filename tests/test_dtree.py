@@ -15,10 +15,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with ISLa.  If not, see <http://www.gnu.org/licenses/>.
-
+import random
 import string
 import unittest
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from grammar_graph import gg
 
@@ -204,7 +204,7 @@ class TestDerivationTree(unittest.TestCase):
 
     def test_replace_path(self):
         parse_tree = ("A", [("B", []), ("C", [("D", None), ("E", [])])])
-        replacement_tree = ("F", [("G", []), ("H", [("I", []), ("J", None)])])
+        replacement_tree = ("F", [("G", []), ("H", [("I", None), ("J", [])])])
 
         dtree = DerivationTree.from_parse_tree(parse_tree)
         replacement_dtree = DerivationTree.from_parse_tree(replacement_tree)
@@ -227,6 +227,65 @@ class TestDerivationTree(unittest.TestCase):
         result = sub_dtree.replace_path(Path(1), sub_replacement_dtree)
 
         self.assertEqual(expected, result.to_parse_tree())
+
+    def test_replace_random(self):
+        def create_random_tree(depth: int) -> ParseTree:
+            num_children = (
+                0
+                if not depth
+                else random.choices(
+                    list(reversed(range(10))), weights=[i * i for i in range(10)], k=1
+                )[0]
+            )
+
+            children = [create_random_tree(depth - 1) for _ in range(num_children)]
+            if not children and random.random() < 0.5:
+                children = None
+
+            return random.choice(string.ascii_lowercase), children
+
+        def paths(tree: ParseTree) -> List[Path]:
+            node, children = tree
+
+            return [Path()] + [
+                Path(i) + path
+                for i, child in enumerate(children or [])
+                for path in paths(child)
+            ]
+
+        def depth(tree: ParseTree) -> int:
+            node, children = tree
+            if not children:
+                return 1
+            return 1 + max([depth(child) for child in children])
+
+        for _ in range(20):
+            tree = create_random_tree(4)
+            dtree = DerivationTree.from_parse_tree(tree)
+
+            repl_tree = create_random_tree(4)
+            repl_dtree = DerivationTree.from_parse_tree(repl_tree)
+
+            for tree, dtree in [
+                (tree, dtree),
+                (
+                    p := random.choice(paths(tree)),
+                    get_subtree(tree, p),
+                    dtree.get_subtree(p),
+                )[1:],
+            ]:
+                all_paths = paths(tree)
+                for p in all_paths:
+                    expected = replace_path(tree, p, repl_tree)
+                    result = dtree.replace_path(p, repl_dtree)
+                    self.assertEqual(
+                        expected,
+                        result.to_parse_tree(),
+                        "Wrong result for:\n"
+                        f"tree = {repr(tree)}\n"
+                        f"repl_tree = {repr(repl_tree)}\n"
+                        f"p = {repr(p)}",
+                    )
 
     def test_replace_path_in_tree_with_root_path(self):
         dtree = DerivationTree(

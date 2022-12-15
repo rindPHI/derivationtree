@@ -57,7 +57,18 @@ class DerivationTreeNode:
     value: str
 
 
-class Path:
+class MemoMeta(type):
+    def __init__(self, name, bases, namespace):
+        super().__init__(name, bases, namespace)
+        self.cache = {}
+
+    def __call__(self, *args):
+        if args not in self.cache:
+            self.cache[args] = super().__call__(*args)
+        return self.cache[args]
+
+
+class Path(metaclass=MemoMeta):
     def __init__(self, *args):
         assert (
             len(args) == 1
@@ -211,7 +222,10 @@ class DerivationTree:
         init_map: Optional[Dict[Path, DerivationTreeNode | str]] = None,
         init_trie: Optional[datrie.Trie] = None,
     ):
-        result: datrie.Trie = init_trie or datrie.Trie([chr(i) for i in range(32)])
+        if init_trie is not None:
+            return init_trie
+
+        result: datrie.Trie = datrie.Trie([chr(i) for i in range(32)])
         for path, node_or_value in (init_map or {}).items():
             result[path.key()] = (
                 node_or_value
@@ -267,7 +281,7 @@ class DerivationTree:
         return bool(self.__open_leaves)
 
     def is_valid_path(self, path: Path) -> bool:
-        return self.__to_absolute_key(path) in self.__trie
+        return self.__to_absolute_key(path).key() in self.__trie
 
     def paths(self) -> Dict[Path, DerivationTreeNode]:
         """
@@ -335,21 +349,22 @@ class DerivationTree:
             )
 
         new_open_leaves = {
-            leaf_key
+            self.__to_relative_key(leaf_key)
             for leaf_key in self.__open_leaves
             if leaf_key.key() not in self.__trie.prefixes(key.key())
             and not leaf_key.startswith(key)
         }
 
         new_trie = datrie.Trie([chr(i) for i in range(32)])
-        for k, v in self.__trie.items():
-            if k.startswith(key.key()):
+        for k in self.__trie.suffixes(self.__root_path.key()):
+            k = chr(1) + k
+            if k.startswith(path.key()):
                 continue
-            new_trie[k] = v
+            new_trie[k] = self.__trie[self.__to_absolute_key(k[1:]).key()]
 
         new_trie.update(
             {
-                (key + repl_tree_suffix).key(): replacement_tree.__trie[
+                (path + repl_tree_suffix).key(): replacement_tree.__trie[
                     (replacement_tree.__root_path + repl_tree_suffix).key()
                 ]
                 for repl_tree_suffix in replacement_tree.__trie.suffixes(
@@ -360,7 +375,7 @@ class DerivationTree:
 
         new_open_leaves.update(
             {
-                key + new_leaf_key[len(replacement_tree.__root_path) :]
+                path + new_leaf_key[len(replacement_tree.__root_path) :]
                 for new_leaf_key in replacement_tree.__open_leaves
             }
         )
@@ -369,7 +384,7 @@ class DerivationTree:
             assert open_leaf.key() in new_trie
 
         return DerivationTree(
-            init_trie=new_trie, root_path=self.__root_path, open_leaves=new_open_leaves
+            init_trie=new_trie, root_path=Path(), open_leaves=new_open_leaves
         )
 
     @staticmethod
@@ -867,8 +882,8 @@ class DerivationTree:
         return (
             isinstance(other, DerivationTree)
             and len(self) == len(other)
-            and self.paths() == other.paths()
             and self.open_leaves() == other.open_leaves()
+            and self.paths() == other.paths()
         )
 
     def structurally_equal(self, other) -> bool:

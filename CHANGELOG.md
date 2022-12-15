@@ -4,6 +4,15 @@ This file contains the notable changes since version 0.1.0.
 
 ## [unreleased]
 
+## [0.4.2]
+
+### Changed
+
+- Fixed `DerivationTree.is_valid_path`
+- Path objects are memoized
+- Potential performance improvement in `DerivationTree.replace_subtree`
+- Performance improvement in `DerivationTree.__init__`
+
 ## [0.4.1]
 
 ### Changed
